@@ -1,0 +1,5 @@
+{
+  "name": "PatrimonioView AI",
+  "description": "A system to parse, visualize, and query asset inventory data from PDF OCR outputs using React and Gemini AI.",
+  "requestFramePermissions": []
+}
