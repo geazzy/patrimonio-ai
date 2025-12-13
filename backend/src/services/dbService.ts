@@ -90,23 +90,39 @@ class DatabaseService {
     const stmt = this.db.prepare('SELECT * FROM assets');
     const assets = stmt.all() as any[];
 
-    return assets.map(asset => ({
-      ...asset,
-      tags: asset.tags ? JSON.parse(asset.tags) : [],
-      history: this.getAssetHistory(asset.id)
+    return assets.map(row => ({
+      id: row.id,
+      description: row.description,
+      value: row.value,
+      valueFormatted: row.value_formatted,
+      termDate: row.term_date,
+      location: row.location,
+      responsible: row.responsible,
+      sector: row.sector,
+      category: row.category,
+      tags: row.tags ? JSON.parse(row.tags) : [],
+      history: this.getAssetHistory(row.id)
     }));
   }
 
   getAssetById(id: string): Asset | null {
     const stmt = this.db.prepare('SELECT * FROM assets WHERE id = ?');
-    const asset = stmt.get(id) as any;
+    const row = stmt.get(id) as any;
 
-    if (!asset) return null;
+    if (!row) return null;
 
     return {
-      ...asset,
-      tags: asset.tags ? JSON.parse(asset.tags) : [],
-      history: this.getAssetHistory(asset.id)
+      id: row.id,
+      description: row.description,
+      value: row.value,
+      valueFormatted: row.value_formatted,
+      termDate: row.term_date,
+      location: row.location,
+      responsible: row.responsible,
+      sector: row.sector,
+      category: row.category,
+      tags: row.tags ? JSON.parse(row.tags) : [],
+      history: this.getAssetHistory(row.id)
     };
   }
 

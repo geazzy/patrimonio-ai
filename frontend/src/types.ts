@@ -45,7 +45,8 @@ export enum ViewMode {
   DASHBOARD = 'DASHBOARD',
   LIST = 'LIST',
   AI_CHAT = 'AI_CHAT',
-  CONFERENCE = 'CONFERENCE' // New mode
+  CONFERENCE = 'CONFERENCE',
+  ASSET_DETAIL = 'ASSET_DETAIL' // Individual asset view
 }
 
 // Conference Specific Types

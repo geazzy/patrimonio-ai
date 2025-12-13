@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Asset, MovementHistory } from '../types';
-import { Search, MapPin, Tag, Edit2, X, CheckSquare, Square, Layers, History, ArrowRight, UserCheck } from 'lucide-react';
+import { Search, MapPin, Tag, Edit2, X, CheckSquare, Square, Layers, History, ArrowRight, UserCheck, Eye } from 'lucide-react';
 
 interface AssetTableProps {
   assets: Asset[];
   onUpdateAssets: (assets: Asset[]) => void;
+  onViewAsset?: (asset: Asset) => void;
 }
 
-export const AssetTable: React.FC<AssetTableProps> = ({ assets, onUpdateAssets }) => {
+export const AssetTable: React.FC<AssetTableProps> = ({ assets, onUpdateAssets, onViewAsset }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
@@ -227,8 +228,26 @@ export const AssetTable: React.FC<AssetTableProps> = ({ assets, onUpdateAssets }
                           )}
                         </button>
                       </td>
-                      <td className="p-4 font-mono font-medium text-blue-600">{asset.id}</td>
-                      <td className="p-4 max-w-xs truncate" title={asset.description}>{asset.description}</td>
+                      <td 
+                        className="p-4 font-mono font-medium text-blue-600 cursor-pointer hover:text-blue-700 hover:underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onViewAsset) onViewAsset(asset);
+                        }}
+                        title="Clique para ver detalhes"
+                      >
+                        {asset.id}
+                      </td>
+                      <td 
+                        className="p-4 max-w-xs truncate cursor-pointer hover:text-blue-600" 
+                        title={asset.description}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onViewAsset) onViewAsset(asset);
+                        }}
+                      >
+                        {asset.description}
+                      </td>
                       <td className="p-4">
                         <span className="inline-block px-2 py-1 bg-slate-100 rounded text-xs text-slate-600 border border-slate-200">
                           {asset.category}
@@ -254,13 +273,25 @@ export const AssetTable: React.FC<AssetTableProps> = ({ assets, onUpdateAssets }
                       </td>
                       <td className="p-4 font-medium">{asset.valueFormatted}</td>
                       <td className="p-4 text-center">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); openSingleEdit(asset); }}
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
-                          title="Detalhes e Edição"
-                        >
-                          <Edit2 size={16} />
-                        </button>
+                        <div className="flex items-center justify-center gap-2">
+                          <button 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (onViewAsset) onViewAsset(asset);
+                            }}
+                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
+                            title="Ver detalhes"
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); openSingleEdit(asset); }}
+                            className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-full transition-all"
+                            title="Editar"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

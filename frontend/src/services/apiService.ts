@@ -1,4 +1,5 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_PREFIX = '/patrimonio';
 
 export interface Asset {
   id: string;
@@ -57,19 +58,19 @@ async function handleResponse<T>(response: Response): Promise<T> {
 export const apiService = {
   // Get all assets
   async getAssets(): Promise<Asset[]> {
-    const response = await fetch(`${API_URL}/api/assets`);
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/assets`);
     return handleResponse<Asset[]>(response);
   },
 
   // Get asset by ID
   async getAsset(id: string): Promise<Asset> {
-    const response = await fetch(`${API_URL}/api/assets/${id}`);
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/assets/${id}`);
     return handleResponse<Asset>(response);
   },
 
   // Create new asset
   async createAsset(asset: Asset): Promise<Asset> {
-    const response = await fetch(`${API_URL}/api/assets`, {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/assets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(asset)
@@ -79,7 +80,7 @@ export const apiService = {
 
   // Update asset
   async updateAsset(id: string, asset: Partial<Asset>): Promise<Asset> {
-    const response = await fetch(`${API_URL}/api/assets/${id}`, {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/assets/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...asset, id })
@@ -89,7 +90,7 @@ export const apiService = {
 
   // Delete asset
   async deleteAsset(id: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/assets/${id}`, {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/assets/${id}`, {
       method: 'DELETE'
     });
     if (!response.ok) {
@@ -100,7 +101,7 @@ export const apiService = {
 
   // Import assets from PDF text
   async importAssets(pdfText: string): Promise<ImportResponse> {
-    const response = await fetch(`${API_URL}/api/assets/import`, {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/assets/import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pdfText })
@@ -110,7 +111,7 @@ export const apiService = {
 
   // Bulk upsert assets (after conflict resolution)
   async bulkUpsertAssets(assets: Asset[]): Promise<{ success: boolean; count: number }> {
-    const response = await fetch(`${API_URL}/api/assets/bulk-upsert`, {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/assets/bulk-upsert`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ assets })
@@ -120,17 +121,17 @@ export const apiService = {
 
   // Conference operations
   async getConferences(): Promise<ConferenceRecord[]> {
-    const response = await fetch(`${API_URL}/api/conferences`);
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences`);
     return handleResponse<ConferenceRecord[]>(response);
   },
 
   async getConference(id: string): Promise<ConferenceRecord> {
-    const response = await fetch(`${API_URL}/api/conferences/${id}`);
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${id}`);
     return handleResponse<ConferenceRecord>(response);
   },
 
   async createConference(conference: ConferenceRecord): Promise<ConferenceRecord> {
-    const response = await fetch(`${API_URL}/api/conferences`, {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(conference)
@@ -146,7 +147,7 @@ export const apiService = {
       summary: { matches: number; aliens: number; newItems: number; missing: number };
     }
   ): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_URL}/api/conferences/${id}/commit`, {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${id}/commit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -156,7 +157,7 @@ export const apiService = {
 
   // AI operations
   async queryAI(query: string, assetIds?: string[]): Promise<{ response: string }> {
-    const response = await fetch(`${API_URL}/api/ai/query`, {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/ai/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, assetIds })

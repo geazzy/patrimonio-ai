@@ -20,15 +20,21 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Create main router for /patrimonio prefix
+const patrimonioRouter = express.Router();
+
 // Health check endpoint
-app.get('/health', (req, res) => {
+patrimonioRouter.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // API routes
-app.use('/api/assets', assetsRouter);
-app.use('/api/conferences', conferencesRouter);
-app.use('/api/ai', aiRouter);
+patrimonioRouter.use('/api/assets', assetsRouter);
+patrimonioRouter.use('/api/conferences', conferencesRouter);
+patrimonioRouter.use('/api/ai', aiRouter);
+
+// Mount all routes under /patrimonio prefix
+app.use('/patrimonio', patrimonioRouter);
 
 // 404 handler
 app.use((req, res) => {
