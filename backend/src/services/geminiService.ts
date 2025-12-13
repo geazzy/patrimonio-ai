@@ -1,13 +1,23 @@
 import { GoogleGenAI } from "@google/genai";
-import { Asset } from "../types";
+import { Asset } from "../models/types.js";
 
-// Initialize the API
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy initialization - only create when needed
+let aiInstance: GoogleGenAI | null = null;
+
+function getAIInstance(): GoogleGenAI {
+  if (!aiInstance) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY environment variable is required");
+    }
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+}
 
 /**
  * Uses Gemini to analyze natural language queries against the dataset.
- * Since the dataset is currently client-side and relatively small (filtered),
- * we can pass relevant context to the model.
+ * Receives asset IDs from frontend and fetches data from database.
  */
 export const askGeminiAboutAssets = async (
   query: string,
@@ -38,6 +48,7 @@ export const askGeminiAboutAssets = async (
     })))}
     `;
 
+    const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: `You are a helpful asset manager assistant. 
@@ -56,3 +67,4 @@ export const askGeminiAboutAssets = async (
     return "Erro ao conectar com a Inteligência Artificial. Verifique sua chave de API.";
   }
 };
+

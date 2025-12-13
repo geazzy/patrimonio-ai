@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { RAW_OCR_DATA } from './constants';
-import { parseOCRData } from './services/parser';
 import { extractTextFromPDF } from './services/pdfService';
+import apiService from './services/apiService';
 import { Asset, ViewMode, ImportSessionData, ImportConflict, MovementHistory, ConferenceSession, ConferenceRecord } from './types';
 import { Dashboard } from './components/Dashboard';
 import { AssetTable } from './components/AssetTable';
@@ -24,51 +23,27 @@ const App: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load Initial Data
+  // Load Initial Data from Backend
   useEffect(() => {
-    const loadData = () => {
+    const loadData = async () => {
       try {
-        // Assets
-        const storedData = localStorage.getItem('patrimonio_db_v1');
-        if (storedData) {
-          setAssets(JSON.parse(storedData));
-        } else {
-          const parsedData = parseOCRData(RAW_OCR_DATA);
-          setAssets(parsedData);
-          localStorage.setItem('patrimonio_db_v1', JSON.stringify(parsedData));
-        }
+        // Load assets from backend
+        const loadedAssets = await apiService.getAssets();
+        setAssets(loadedAssets);
 
-        // Conference History
-        const storedHistory = localStorage.getItem('patrimonio_conferences_v1');
-        if (storedHistory) {
-          setConferenceHistory(JSON.parse(storedHistory));
-        }
-
-        // Active Session (Optional: could also be persisted if desired, currently memory only for simplicity)
-        // Ideally, we might want to save current session to LS too.
+        // Load conference history from backend
+        const loadedConferences = await apiService.getConferences();
+        setConferenceHistory(loadedConferences);
       } catch (error) {
-        console.error("Error loading database:", error);
+        console.error("Error loading data from backend:", error);
+        alert('Erro ao carregar dados do servidor. Verifique se o backend está rodando.');
       } finally {
         setIsLoading(false);
       }
     };
 
-    setTimeout(loadData, 800);
+    loadData();
   }, []);
-
-  // Persist Assets
-  useEffect(() => {
-    if (!isLoading && assets.length > 0) {
-      localStorage.setItem('patrimonio_db_v1', JSON.stringify(assets));
-    }
-  }, [assets, isLoading]);
-
-  // Persist History
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem('patrimonio_conferences_v1', JSON.stringify(conferenceHistory));
-    }
-  }, [conferenceHistory, isLoading]);
 
   const handleUpdateAssets = (updatedAssets: Asset[]) => {
     setAssets(prevAssets => {
@@ -77,58 +52,54 @@ const App: React.FC = () => {
     });
   };
 
-  const handleConferenceCommit = (
+  const handleConferenceCommit = async (
     newAssets: Asset[], 
     updates: { id: string, newLocation: string }[],
     summary: { matches: number; aliens: number; newItems: number; missing: number }
   ) => {
-    // 1. Update Assets Database
-    setAssets(prev => {
-      const assetMap = new Map(prev.map(a => [a.id, a]));
+    try {
+      setIsLoading(true);
 
-      // Process Updates (Moves)
-      updates.forEach(u => {
-        const asset = assetMap.get(u.id);
-        if (asset && asset.location !== u.newLocation) {
-          const historyEntry: MovementHistory = {
-            date: new Date().toLocaleDateString('pt-BR'),
-            fromLocation: asset.location,
-            toLocation: u.newLocation,
-            authorizedBy: 'Conferência'
-          };
-          assetMap.set(u.id, {
-            ...asset,
-            location: u.newLocation,
-            history: [...asset.history, historyEntry]
-          });
-        }
+      // 1. Create conference record first
+      let conferenceId: string;
+      if (conferenceSession) {
+        const record: ConferenceRecord = {
+          id: crypto.randomUUID(),
+          date: new Date().toISOString(),
+          location: conferenceSession.targetLocation,
+          stats: summary,
+          scannedItemsSnapshot: conferenceSession.scannedItems
+        };
+        
+        const createdConference = await apiService.createConference(record);
+        conferenceId = createdConference.id;
+      } else {
+        throw new Error('No conference session');
+      }
+
+      // 2. Commit changes to backend (new assets, updates, etc.)
+      await apiService.commitConference(conferenceId, {
+        newAssets,
+        updates,
+        summary
       });
 
-      // Process Inserts (New Items)
-      newAssets.forEach(a => {
-        if (!assetMap.has(a.id)) {
-          assetMap.set(a.id, a);
-        }
-      });
+      // 3. Reload data from backend
+      const updatedAssets = await apiService.getAssets();
+      setAssets(updatedAssets);
 
-      return Array.from(assetMap.values());
-    });
-
-    // 2. Save Conference Record to History
-    if (conferenceSession) {
-      const record: ConferenceRecord = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        location: conferenceSession.targetLocation,
-        stats: summary,
-        scannedItemsSnapshot: conferenceSession.scannedItems
-      };
-      setConferenceHistory(prev => [record, ...prev]);
+      const updatedConferences = await apiService.getConferences();
+      setConferenceHistory(updatedConferences);
+      
+      // 4. Clear Session
+      setConferenceSession(null);
+      alert('Conferência salva e finalizada com sucesso!');
+    } catch (error) {
+      console.error('Error committing conference:', error);
+      alert('Erro ao salvar conferência. Tente novamente.');
+    } finally {
+      setIsLoading(false);
     }
-    
-    // 3. Clear Session (Redirect to History View)
-    setConferenceSession(null);
-    alert('Conferência salva e finalizada com sucesso!');
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,44 +114,21 @@ const App: React.FC = () => {
     setIsLoading(true);
     
     try {
+      // Extract text from PDF (client-side)
       const pdfText = await extractTextFromPDF(file);
-      const incomingAssets = parseOCRData(pdfText);
       
-      if (incomingAssets.length === 0) {
+      // Send to backend for processing and conflict detection
+      const importResult = await apiService.importAssets(pdfText);
+      
+      if (importResult.newAssets.length === 0 && importResult.conflicts.length === 0) {
         alert('Nenhum dado identificado. Verifique o PDF.');
         setIsLoading(false);
         return;
       }
 
-      // --- Diff & Merge Logic ---
-      const currentAssetMap = new Map(assets.map(a => [a.id, a]));
-      const newRecords: Asset[] = [];
-      const conflictRecords: ImportConflict[] = [];
-
-      incomingAssets.forEach(incoming => {
-        const existing = currentAssetMap.get(incoming.id);
-
-        if (!existing) {
-          newRecords.push(incoming);
-        } else {
-          const isLocationDifferent = existing.location !== incoming.location;
-          const isValueDifferent = existing.value !== incoming.value;
-          const isDescDifferent = existing.description !== incoming.description;
-
-          if (isLocationDifferent || isValueDifferent || isDescDifferent) {
-            conflictRecords.push({
-              assetId: incoming.id,
-              currentAsset: existing,
-              incomingAsset: incoming,
-              isResolved: false
-            });
-          }
-        }
-      });
-
       setImportSession({
-        newAssets: newRecords,
-        conflicts: conflictRecords,
+        newAssets: importResult.newAssets,
+        conflicts: importResult.conflicts,
         fileName: file.name
       });
 
@@ -193,17 +141,25 @@ const App: React.FC = () => {
     }
   };
 
-  const handleConfirmImport = (finalAssetsToMerge: Asset[]) => {
-    setAssets(prev => {
-      const currentMap = new Map(prev.map(a => [a.id, a]));
-      finalAssetsToMerge.forEach(newItem => {
-        currentMap.set(newItem.id, newItem);
-      });
-      return Array.from(currentMap.values());
-    });
+  const handleConfirmImport = async (finalAssetsToMerge: Asset[]) => {
+    try {
+      setIsLoading(true);
+      
+      // Send to backend for bulk upsert
+      await apiService.bulkUpsertAssets(finalAssetsToMerge);
+      
+      // Reload assets from backend
+      const updatedAssets = await apiService.getAssets();
+      setAssets(updatedAssets);
 
-    setImportSession(null);
-    setViewMode(ViewMode.LIST);
+      setImportSession(null);
+      setViewMode(ViewMode.LIST);
+    } catch (error) {
+      console.error('Error confirming import:', error);
+      alert('Erro ao salvar importação. Tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const cancelImport = () => {
@@ -313,7 +269,7 @@ const App: React.FC = () => {
         <div className="p-4 border-t border-slate-800">
           <div className="bg-slate-800 rounded-lg p-3">
             <p className="text-xs text-slate-400 mb-1 flex items-center gap-1">
-              <Database size={10} /> Banco de Dados Local
+              <Database size={10} /> Banco de Dados SQLite
             </p>
             <div className="flex items-center gap-2 text-xs text-green-400">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>

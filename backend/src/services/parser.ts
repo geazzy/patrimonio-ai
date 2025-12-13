@@ -1,4 +1,4 @@
-import { Asset } from '../types';
+import { Asset } from '../models/types.js';
 
 /**
  * Helper to determine category based on description keywords.
@@ -74,3 +74,4 @@ export const parseOCRData = (text: string): Asset[] => {
 
   return assets;
 };
+

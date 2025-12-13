@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Asset } from '../types';
-import { askGeminiAboutAssets } from '../services/geminiService';
+import apiService from '../services/apiService';
 import { Send, Bot, User, Loader2 } from 'lucide-react';
 
 interface AIChatProps {
@@ -27,10 +27,21 @@ export const AIChat: React.FC<AIChatProps> = ({ assets }) => {
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setIsLoading(true);
 
-    const answer = await askGeminiAboutAssets(userMsg, assets);
-
-    setIsLoading(false);
-    setMessages(prev => [...prev, { role: 'ai', content: answer }]);
+    try {
+      // Send query to backend with all asset IDs
+      const assetIds = assets.map(a => a.id);
+      const result = await apiService.queryAI(userMsg, assetIds);
+      
+      setMessages(prev => [...prev, { role: 'ai', content: result.response }]);
+    } catch (error) {
+      console.error('Error querying AI:', error);
+      setMessages(prev => [...prev, { 
+        role: 'ai', 
+        content: 'Desculpe, ocorreu um erro ao processar sua consulta. Verifique se o backend está rodando.' 
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
