@@ -152,6 +152,9 @@ class DatabaseService {
   }
 
   updateAsset(asset: Asset): void {
+    // Detect location changes to append movement history
+    const existing = this.getAssetById(asset.id);
+
     const stmt = this.db.prepare(`
       UPDATE assets 
       SET description = ?, value = ?, value_formatted = ?, term_date = ?, 
@@ -172,6 +175,19 @@ class DatabaseService {
       JSON.stringify(asset.tags),
       asset.id
     );
+
+    // If location changed, insert a movement_history record
+    if (existing && existing.location !== asset.location) {
+      const lastAuth = asset.history && asset.history.length > 0 ? asset.history[asset.history.length - 1].authorizedBy : null;
+      const authorizedBy = lastAuth || 'Não informado';
+      const date = new Date().toISOString();
+
+      const mhStmt = this.db.prepare(`
+        INSERT INTO movement_history (asset_id, date, from_location, to_location, authorized_by)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      mhStmt.run(asset.id, date, existing.location, asset.location, authorizedBy);
+    }
   }
 
   deleteAsset(id: string): void {

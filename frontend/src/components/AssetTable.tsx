@@ -111,7 +111,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ assets, onUpdateAssets, 
 
           if (applyLocation && editLocation && editLocation !== a.location) {
              const historyEntry: MovementHistory = {
-                date: new Date().toLocaleDateString('pt-BR'),
+               date: new Date().toISOString(),
                 fromLocation: a.location,
                 toLocation: editLocation,
                 authorizedBy: editAuthBy || 'Massa'
@@ -133,7 +133,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ assets, onUpdateAssets, 
       if (editLocation !== editingAsset.location) {
         location = editLocation;
         const historyEntry: MovementHistory = {
-          date: new Date().toLocaleDateString('pt-BR'),
+          date: new Date().toISOString(),
           fromLocation: editingAsset.location,
           toLocation: editLocation,
           authorizedBy: editAuthBy || 'Não informado'

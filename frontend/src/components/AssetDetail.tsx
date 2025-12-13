@@ -68,7 +68,7 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
       if (editLocation !== currentAsset.location) {
         location = editLocation;
         const historyEntry: MovementHistory = {
-          date: new Date().toLocaleDateString('pt-BR'),
+          date: new Date().toISOString(),
           fromLocation: currentAsset.location,
           toLocation: editLocation,
           authorizedBy: editAuthBy || 'Não informado'
