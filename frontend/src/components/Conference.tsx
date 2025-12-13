@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Asset, ScannedItem, ScanStatus, ConferenceSession, ConferenceRecord } from '../types';
-import { QrCode, CheckCircle, AlertTriangle, HelpCircle, ArrowRight, MapPin, X, Save, RotateCcw, ChevronLeft, Trash2, Calendar, ClipboardList, Plus } from 'lucide-react';
+import { QrCode, CheckCircle, AlertTriangle, HelpCircle, ArrowRight, MapPin, X, Save, RotateCcw, ChevronLeft, Trash2, Calendar, ClipboardList, Plus, Eye } from 'lucide-react';
 
 interface ConferenceProps {
   assets: Asset[];
@@ -17,6 +17,7 @@ interface ConferenceProps {
 export const Conference: React.FC<ConferenceProps> = ({ assets, session, history, onUpdateSession, onCommitChanges }) => {
   // View State: 'LIST' (History) or 'SETUP' (New Conf). If session exists, this is ignored.
   const [localView, setLocalView] = useState<'LIST' | 'SETUP'>('LIST');
+  const [selectedRecord, setSelectedRecord] = useState<ConferenceRecord | null>(null);
 
   // Local state for Setup input
   const [setupLocation, setSetupLocation] = useState('');
@@ -193,6 +194,59 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
     setLocalView('LIST');
   };
 
+  const SnapshotList: React.FC<{ title: string; items: ScannedItem[] }> = ({ title, items }) => {
+    if (!items || items.length === 0) {
+      return (
+        <div className="border border-slate-200 rounded-lg p-4 text-slate-500 bg-slate-50">
+          <div className="flex items-center gap-2 text-sm"><ClipboardList size={16} className="text-slate-400" /> {title}</div>
+          <p className="text-sm text-slate-400 mt-2">Nenhum item registrado.</p>
+        </div>
+      );
+    }
+
+    const ordered = [...items].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return (
+      <div className="border border-slate-200 rounded-lg overflow-hidden">
+        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <ClipboardList size={16} className="text-blue-600" /> {title}
+        </div>
+        <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+          {ordered.map((item, idx) => {
+            const statusChip = {
+              MATCH: { label: 'OK', cls: 'bg-green-50 text-green-700 border-green-100' },
+              ALIEN: { label: 'Divergente', cls: 'bg-amber-50 text-amber-700 border-amber-100' },
+              NEW: { label: 'Novo', cls: 'bg-blue-50 text-blue-700 border-blue-100' }
+            }[item.status];
+
+            return (
+              <div key={idx} className="px-4 py-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-mono text-xs text-slate-500">#{item.id}</p>
+                  <p className="text-sm font-semibold text-slate-800">{item.description}</p>
+                  {item.expectedLocation && (
+                    <p className="text-xs text-amber-600 mt-1">Esperado em {item.expectedLocation}</p>
+                  )}
+                </div>
+                <div className="text-right text-xs text-slate-500 flex flex-col items-end gap-1">
+                  <span className={`px-2 py-0.5 rounded-full border text-[11px] ${statusChip.cls}`}>{statusChip.label}</span>
+                  <span>{new Date(item.timestamp).toLocaleString()}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const StatCard: React.FC<{ label: string; value: number; color: string; bg: string }> = ({ label, value, color, bg }) => (
+    <div className={`${bg} rounded-lg p-3 border border-slate-200`}> 
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className={`text-xl font-bold ${color}`}>{value}</p>
+    </div>
+  );
+
   // --- RENDERERS ---
 
   // 1. NO ACTIVE SESSION: Show History or Setup Form
@@ -239,7 +293,11 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {history.map((record) => (
-                    <tr key={record.id} className="hover:bg-slate-50 transition-colors">
+                    <tr 
+                      key={record.id} 
+                      className="hover:bg-slate-50 transition-colors cursor-pointer"
+                      onClick={() => setSelectedRecord(record)}
+                    >
                       <td className="p-4 text-slate-600 flex items-center gap-2">
                         <Calendar size={14} className="text-slate-400" />
                         {new Date(record.date).toLocaleDateString()}
@@ -258,6 +316,36 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
               </table>
             )}
           </div>
+
+          {selectedRecord && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelectedRecord(null)}>
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+                  <div>
+                    <p className="text-xs uppercase text-slate-500">Conferência</p>
+                    <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                      <Eye size={16} className="text-blue-600" /> {selectedRecord.location}
+                    </h3>
+                    <p className="text-xs text-slate-500">{new Date(selectedRecord.date).toLocaleString()}</p>
+                  </div>
+                  <button onClick={() => setSelectedRecord(null)} className="text-slate-400 hover:text-slate-600">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-5">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <StatCard label="Encontrados" value={selectedRecord.stats.matches} color="text-green-600" bg="bg-green-50" />
+                    <StatCard label="Ausentes" value={selectedRecord.stats.missing} color="text-red-600" bg="bg-red-50" />
+                    <StatCard label="Divergentes" value={selectedRecord.stats.aliens} color="text-amber-600" bg="bg-amber-50" />
+                    <StatCard label="Novos" value={selectedRecord.stats.newItems} color="text-blue-600" bg="bg-blue-50" />
+                  </div>
+
+                  <SnapshotList title="Itens verificados" items={selectedRecord.scannedItemsSnapshot} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
