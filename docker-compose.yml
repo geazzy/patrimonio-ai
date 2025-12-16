@@ -1,0 +1,41 @@
+services:
+  patrimonio-backend:
+    image: patrimonio-backend:latest
+    env_file:
+      - ./backend/.env
+    environment:
+      - FRONTEND_URL=https://dacom.cm.utfpr.edu.br/patrimonio
+      - NODE_ENV=production
+    volumes:
+      - patrimonio-db:/app/database
+    expose:
+      - "3001"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.patrimonio-back.rule=Host(\`dacom.cm.utfpr.edu.br\`) && PathPrefix(\`/patrimonio/api\`)"
+      - "traefik.http.routers.patrimonio-back.entrypoints=websecure"
+      - "traefik.http.routers.patrimonio-back.tls.certresolver=myresolver"
+      - "traefik.http.services.patrimonio-back.loadbalancer.server.port=3001"
+    networks:
+      - web
+
+  patrimonio-frontend:
+    image: patrimonio-frontend:latest
+    expose:
+      - "80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.patrimonio-front.rule=Host(\`dacom.cm.utfpr.edu.br\`) && PathPrefix(\`/patrimonio\`)"
+      - "traefik.http.routers.patrimonio-front.entrypoints=websecure"
+      - "traefik.http.routers.patrimonio-front.tls.certresolver=myresolver"
+      - "traefik.http.services.patrimonio-front.loadbalancer.server.port=80"
+    networks:
+      - web
+
+networks:
+  web:
+    external: true
+    name: docker_web
+
+volumes:
+  patrimonio-db:
