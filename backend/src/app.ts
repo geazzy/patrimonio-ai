@@ -1,9 +1,14 @@
 import express, { Express } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
 import assetsRouter from './routes/assets.js';
 import conferencesRouter from './routes/conferences.js';
 import aiRouter from './routes/ai.js';
+import authRouter from './routes/auth.js';
+import adminRouter from './routes/admin.js';
+import { requireAuth } from './middleware/auth.js';
+import { apiLimiter } from './middleware/rateLimiter.js';
 
 dotenv.config();
 
@@ -20,18 +25,30 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Cookie parser middleware
+app.use(cookieParser());
+
 // Create main router for /patrimonio prefix
 const patrimonioRouter = express.Router();
 
-// Health check endpoint
+// Global rate limiter para API (considera o prefixo /patrimonio)
+patrimonioRouter.use('/api', apiLimiter);
+
+// Health check endpoint (public)
 patrimonioRouter.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API routes
-patrimonioRouter.use('/api/assets', assetsRouter);
-patrimonioRouter.use('/api/conferences', conferencesRouter);
-patrimonioRouter.use('/api/ai', aiRouter);
+// Auth routes (public)
+patrimonioRouter.use('/api/auth', authRouter);
+
+// Protected API routes (require authentication)
+patrimonioRouter.use('/api/assets', requireAuth, assetsRouter);
+patrimonioRouter.use('/api/conferences', requireAuth, conferencesRouter);
+patrimonioRouter.use('/api/ai', requireAuth, aiRouter);
+
+// Admin routes (require authentication + admin role)
+patrimonioRouter.use('/api/admin', adminRouter);
 
 // Mount all routes under /patrimonio prefix
 app.use('/patrimonio', patrimonioRouter);

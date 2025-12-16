@@ -46,7 +46,8 @@ export enum ViewMode {
   LIST = 'LIST',
   AI_CHAT = 'AI_CHAT',
   CONFERENCE = 'CONFERENCE',
-  ASSET_DETAIL = 'ASSET_DETAIL' // Individual asset view
+  ASSET_DETAIL = 'ASSET_DETAIL', // Individual asset view
+  ADMIN = 'ADMIN' // Admin panel
 }
 
 // Conference Specific Types
@@ -79,4 +80,19 @@ export interface ConferenceRecord {
     missing: number;
   };
   scannedItemsSnapshot: ScannedItem[];
+}
+
+// Auth types
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  isAdmin: boolean;
+  isApproved: boolean;
+}
+
+export interface AuthState {
+  user: User | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
 }

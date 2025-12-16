@@ -2,7 +2,8 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync } from 'fs';
-import { Asset, MovementHistory, ConferenceRecord } from '../models/types.js';
+import { Asset, MovementHistory, ConferenceRecord, User, RefreshToken } from '../models/types.js';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,6 +83,41 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_assets_location ON assets(location);
       CREATE INDEX IF NOT EXISTS idx_assets_category ON assets(category);
       CREATE INDEX IF NOT EXISTS idx_movement_asset_id ON movement_history(asset_id);
+    `);
+
+    // Create users table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        google_id TEXT UNIQUE NOT NULL,
+        is_admin INTEGER DEFAULT 0,
+        is_approved INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_login DATETIME
+      )
+    `);
+
+    // Create refresh_tokens table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        expires_at DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_used_at DATETIME,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create indexes for auth tables
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+      CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
+      CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+      CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
     `);
   }
 
@@ -331,6 +367,165 @@ class DatabaseService {
 
   close(): void {
     this.db.close();
+  }
+
+  // User operations
+  getUserByEmail(email: string): User | null {
+    const stmt = this.db.prepare('SELECT * FROM users WHERE email = ?');
+    const row = stmt.get(email) as any;
+    
+    if (!row) return null;
+    
+    return {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      googleId: row.google_id,
+      isAdmin: Boolean(row.is_admin),
+      isApproved: Boolean(row.is_approved),
+      createdAt: row.created_at,
+      lastLogin: row.last_login
+    };
+  }
+
+  getUserById(id: string): User | null {
+    const stmt = this.db.prepare('SELECT * FROM users WHERE id = ?');
+    const row = stmt.get(id) as any;
+    
+    if (!row) return null;
+    
+    return {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      googleId: row.google_id,
+      isAdmin: Boolean(row.is_admin),
+      isApproved: Boolean(row.is_approved),
+      createdAt: row.created_at,
+      lastLogin: row.last_login
+    };
+  }
+
+  createOrUpdateUser(googleId: string, email: string, name: string): User {
+    const existingUser = this.getUserByEmail(email);
+    
+    if (existingUser) {
+      // Update last login
+      const stmt = this.db.prepare(`
+        UPDATE users 
+        SET name = ?, google_id = ?, last_login = CURRENT_TIMESTAMP
+        WHERE email = ?
+      `);
+      stmt.run(name, googleId, email);
+      
+      return this.getUserByEmail(email)!;
+    } else {
+      // Create new user (not approved by default)
+      const id = crypto.randomUUID();
+      const stmt = this.db.prepare(`
+        INSERT INTO users (id, email, name, google_id, is_admin, is_approved, last_login)
+        VALUES (?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP)
+      `);
+      stmt.run(id, email, name, googleId);
+      
+      return this.getUserById(id)!;
+    }
+  }
+
+  listPendingUsers(): User[] {
+    const stmt = this.db.prepare('SELECT * FROM users WHERE is_approved = 0 ORDER BY created_at DESC');
+    const rows = stmt.all() as any[];
+    
+    return rows.map(row => ({
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      googleId: row.google_id,
+      isAdmin: Boolean(row.is_admin),
+      isApproved: Boolean(row.is_approved),
+      createdAt: row.created_at,
+      lastLogin: row.last_login
+    }));
+  }
+
+  approveUser(userId: string): void {
+    const stmt = this.db.prepare('UPDATE users SET is_approved = 1 WHERE id = ?');
+    stmt.run(userId);
+  }
+
+  revokeUser(userId: string): void {
+    const stmt = this.db.prepare('UPDATE users SET is_approved = 0 WHERE id = ?');
+    stmt.run(userId);
+    // Also revoke all refresh tokens
+    this.revokeAllUserTokens(userId);
+  }
+
+  promoteToAdmin(userId: string): void {
+    const stmt = this.db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?');
+    stmt.run(userId);
+  }
+
+  // Refresh token operations
+  createRefreshToken(userId: string, token: string, expiresAt: Date): RefreshToken {
+    const id = crypto.randomUUID();
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    
+    const stmt = this.db.prepare(`
+      INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at)
+      VALUES (?, ?, ?, ?)
+    `);
+    
+    stmt.run(id, userId, tokenHash, expiresAt.toISOString());
+    
+    return {
+      id,
+      userId,
+      tokenHash,
+      expiresAt: expiresAt.toISOString(),
+      createdAt: new Date().toISOString(),
+      lastUsedAt: null
+    };
+  }
+
+  validateRefreshToken(token: string): RefreshToken | null {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    
+    const stmt = this.db.prepare(`
+      SELECT * FROM refresh_tokens 
+      WHERE token_hash = ? AND expires_at > datetime('now')
+    `);
+    
+    const row = stmt.get(tokenHash) as any;
+    
+    if (!row) return null;
+    
+    // Update last_used_at
+    const updateStmt = this.db.prepare(`
+      UPDATE refresh_tokens 
+      SET last_used_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `);
+    updateStmt.run(row.id);
+    
+    return {
+      id: row.id,
+      userId: row.user_id,
+      tokenHash: row.token_hash,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
+      lastUsedAt: new Date().toISOString()
+    };
+  }
+
+  revokeRefreshToken(token: string): void {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const stmt = this.db.prepare('DELETE FROM refresh_tokens WHERE token_hash = ?');
+    stmt.run(tokenHash);
+  }
+
+  revokeAllUserTokens(userId: string): void {
+    const stmt = this.db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?');
+    stmt.run(userId);
   }
 }
 

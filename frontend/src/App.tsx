@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { extractTextFromPDF } from './services/pdfService';
-import apiService from './services/apiService';
+import apiService, { User } from './services/apiService';
 import { Asset, ViewMode, ImportSessionData, ImportConflict, MovementHistory, ConferenceSession, ConferenceRecord } from './types';
 import { Dashboard } from './components/Dashboard';
 import { AssetTable } from './components/AssetTable';
@@ -8,7 +8,8 @@ import { AIChat } from './components/AIChat';
 import { ImportPreview } from './components/ImportPreview';
 import { Conference } from './components/Conference';
 import { AssetDetail } from './components/AssetDetail';
-import { LayoutDashboard, Table, MessageSquareText, ShieldCheck, Upload, FileText, Database, QrCode, Menu, X } from 'lucide-react';
+import { AdminPanel } from './components/AdminPanel';
+import { LayoutDashboard, Table, MessageSquareText, ShieldCheck, Upload, FileText, Database, QrCode, Menu, X, Shield, LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -16,6 +17,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   // Import Session State
   const [importSession, setImportSession] = useState<ImportSessionData | null>(null);
@@ -30,6 +32,10 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
+        // Load current user
+        const { user } = await apiService.getMe();
+        setCurrentUser(user);
+
         // Load assets from backend
         const loadedAssets = await apiService.getAssets();
         setAssets(loadedAssets);
@@ -173,6 +179,17 @@ const App: React.FC = () => {
     fileInputRef.current?.click();
   };
 
+  const handleLogout = async () => {
+    if (confirm('Deseja realmente sair?')) {
+      try {
+        await apiService.logout();
+        window.location.reload();
+      } catch (error) {
+        console.error('Erro ao fazer logout:', error);
+      }
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -258,6 +275,18 @@ const App: React.FC = () => {
             <span>Consultar IA</span>
           </button>
 
+          {currentUser?.isAdmin && (
+            <button
+              onClick={() => setViewMode(ViewMode.ADMIN)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                viewMode === ViewMode.ADMIN ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/20' : 'hover:bg-slate-800'
+              }`}
+            >
+              <Shield size={20} />
+              <span>Gerenciar Usuários</span>
+            </button>
+          )}
+
           <div className="pt-4 mt-4 border-t border-slate-800">
             <button
               onClick={triggerFileUpload}
@@ -269,7 +298,7 @@ const App: React.FC = () => {
           </div>
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 space-y-3">
           <div className="bg-slate-800 rounded-lg p-3">
             <p className="text-xs text-slate-400 mb-1 flex items-center gap-1">
               <Database size={10} /> Banco de Dados SQLite
@@ -279,6 +308,27 @@ const App: React.FC = () => {
               Ativo ({assets.length} registros)
             </div>
           </div>
+
+          {currentUser && (
+            <div className="bg-slate-800 rounded-lg p-3">
+              <p className="text-xs text-slate-400 mb-1">Usuário:</p>
+              <p className="text-xs text-white font-semibold truncate">{currentUser.name}</p>
+              <p className="text-xs text-slate-400 truncate">{currentUser.email}</p>
+              {currentUser.isAdmin && (
+                <div className="mt-1 inline-flex items-center px-2 py-1 bg-purple-600 rounded text-xs text-white font-semibold">
+                  <Shield size={10} className="mr-1" /> Admin
+                </div>
+              )}
+            </div>
+          )}
+
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-red-900/50 hover:text-white group"
+          >
+            <LogOut size={20} className="text-slate-500 group-hover:text-red-400 transition-colors" />
+            <span>Sair</span>
+          </button>
         </div>
       </aside>
 
@@ -436,6 +486,7 @@ const App: React.FC = () => {
           />
         )}
         {viewMode === ViewMode.AI_CHAT && <AIChat assets={assets} />}
+        {viewMode === ViewMode.ADMIN && <AdminPanel />}
         {viewMode === ViewMode.CONFERENCE && (
           <Conference 
             assets={assets} 

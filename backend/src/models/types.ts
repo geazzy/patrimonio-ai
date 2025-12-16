@@ -57,3 +57,32 @@ export interface ConferenceRecord {
   scannedItemsSnapshot: ScannedItem[];
 }
 
+// Authentication types
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  googleId: string;
+  isAdmin: boolean;
+  isApproved: boolean;
+  createdAt: string;
+  lastLogin: string | null;
+}
+
+export interface RefreshToken {
+  id: string;
+  userId: string;
+  tokenHash: string; // SHA-256 hash
+  expiresAt: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  isAdmin: boolean;
+  isApproved: boolean;
+}
+
