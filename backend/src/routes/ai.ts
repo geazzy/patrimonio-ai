@@ -19,7 +19,7 @@ router.post('/query', async (req: Request, res: Response) => {
     if (assetIds && Array.isArray(assetIds) && assetIds.length > 0) {
       assets = assetIds
         .map((id: string) => db.getAssetById(id))
-        .filter((asset: any) => asset !== null);
+        .filter((asset: any) => asset !== null) as any[];
     } else {
       assets = db.getAllAssets();
     }

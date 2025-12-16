@@ -9,7 +9,7 @@ ENV NODE_ENV=production
 FROM base AS deps
 RUN apk add --no-cache python3 make g++
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 # Stage 2: build
 FROM deps AS build
