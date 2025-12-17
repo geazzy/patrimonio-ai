@@ -12,7 +12,7 @@ declare global {
 }
 
 const JWT_SECRET = process.env.APP_JWT_SECRET || 'your-secret-key-change-in-production';
-const ACCESS_TOKEN_EXPIRY = '15m';
+const ACCESS_TOKEN_EXPIRY = '120m';
 
 export function generateAccessToken(user: AuthUser): string {
   return jwt.sign(user, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
