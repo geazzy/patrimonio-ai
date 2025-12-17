@@ -5,14 +5,18 @@ import {
   PieChart, Pie, Cell, Legend 
 } from 'recharts';
 import { Coins, Boxes, MapPin, TrendingUp, Tag } from 'lucide-react';
+import { AdminApprovalPanel } from './AdminApprovalPanel';
+import { User } from '../services/apiService';
 
 interface DashboardProps {
   assets: Asset[];
+  onReloadAssets?: () => Promise<void>;
+  currentUser?: User;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
-export const Dashboard: React.FC<DashboardProps> = ({ assets }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ assets, onReloadAssets, currentUser }) => {
   
   const stats = useMemo(() => {
     const totalAssets = assets.length;
@@ -151,6 +155,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets }) => {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Conference Approval Section */}
+      <AdminApprovalPanel currentUser={currentUser} onApprovalComplete={onReloadAssets} />
     </div>
   );
 };

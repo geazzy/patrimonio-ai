@@ -28,6 +28,10 @@ const App: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Filter out location marker assets (created as dummy assets)
+  const visibleAssets = assets.filter(a => !a.tags?.includes('Locação') && a.category !== 'Sistema');
+
+
   // Load Initial Data from Backend
   useEffect(() => {
     const loadData = async () => {
@@ -81,6 +85,22 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
+  // Reload assets from backend
+  const reloadAssets = async () => {
+    try {
+      const loadedAssets = await apiService.getAssets();
+      setAssets(loadedAssets);
+      
+      // Also reload conferences
+      const loadedConferences = await apiService.getConferences();
+      setConferenceHistory(loadedConferences);
+      
+      console.log(`Assets reloaded: ${loadedAssets.length} items`);
+    } catch (error) {
+      console.error("Error reloading assets:", error);
+    }
+  };
+
   // Helper to compute summary from a session
   const computeSummary = (session: ConferenceSession) => {
     const scannedItems = session.scannedItems;
@@ -128,9 +148,13 @@ const App: React.FC = () => {
           date: new Date().toISOString(),
           location: session.targetLocation,
           stats: summary,
-          scannedItemsSnapshot: session.scannedItems
-        };
-        const created = await apiService.createConference(newRecord);
+          scannedItemsSnapshot: session.scannedItems,
+          status: 'DRAFT',
+          createdBy: currentUser ? currentUser.email : 'unknown',
+          lastModifiedBy: currentUser ? currentUser.email : 'unknown',
+          lastModifiedAt: new Date().toISOString()
+        } as any;
+        const created = await apiService.createConference(newRecord as any);
         conferenceId = created.id;
 
         // Attach id to the session in state and localStorage
@@ -143,9 +167,13 @@ const App: React.FC = () => {
           date: new Date().toISOString(),
           location: session.targetLocation,
           stats: summary,
-          scannedItemsSnapshot: session.scannedItems
-        };
-        await apiService.updateConference(record);
+          scannedItemsSnapshot: session.scannedItems,
+          status: 'DRAFT',
+          createdBy: currentUser ? currentUser.email : 'unknown',
+          lastModifiedBy: currentUser ? currentUser.email : 'unknown',
+          lastModifiedAt: new Date().toISOString()
+        } as any;
+        await apiService.updateConference(record as any);
       }
     } catch (err) {
       console.error('Erro ao salvar progresso da conferência:', err);
@@ -153,11 +181,22 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateAssets = (updatedAssets: Asset[]) => {
-    setAssets(prevAssets => {
-      const updatesMap = new Map(updatedAssets.map(a => [a.id, a]));
-      return prevAssets.map(asset => updatesMap.get(asset.id) || asset);
-    });
+  const handleUpdateAssets = async (updatedAssets: Asset[]) => {
+    try {
+      // Update each asset in the database
+      for (const asset of updatedAssets) {
+        await apiService.updateAsset(asset.id, asset);
+      }
+      
+      // Update local state
+      setAssets(prevAssets => {
+        const updatesMap = new Map(updatedAssets.map(a => [a.id, a]));
+        return prevAssets.map(asset => updatesMap.get(asset.id) || asset);
+      });
+    } catch (error) {
+      console.error('Error updating assets:', error);
+      alert('Erro ao atualizar itens. Tente novamente.');
+    }
   };
 
   const handleConferenceCommit = async (
@@ -169,55 +208,56 @@ const App: React.FC = () => {
       setIsLoading(true);
 
       // 1. Determine conference record (new or existing)
-      let conferenceId: string;
       if (!conferenceSession) throw new Error('No conference session');
+      let conferenceId: string;
 
       if (conferenceSession.conferenceId) {
-        // Continuation/editing existing conference
         conferenceId = conferenceSession.conferenceId;
-        // Optionally update the conference record pre-commit (keep date as now)
         const record: ConferenceRecord = {
           id: conferenceId,
           date: new Date().toISOString(),
           location: conferenceSession.targetLocation,
           stats: summary,
-          scannedItemsSnapshot: conferenceSession.scannedItems
-        };
-        await apiService.updateConference(record);
+          scannedItemsSnapshot: conferenceSession.scannedItems,
+          status: 'DRAFT',
+          createdBy: currentUser ? currentUser.email : 'unknown',
+          lastModifiedBy: currentUser ? currentUser.email : 'unknown',
+          lastModifiedAt: new Date().toISOString()
+        } as any;
+        await apiService.updateConference(record as any);
       } else {
-        // Create new conference
         const record: ConferenceRecord = {
           id: crypto.randomUUID(),
           date: new Date().toISOString(),
           location: conferenceSession.targetLocation,
           stats: summary,
-          scannedItemsSnapshot: conferenceSession.scannedItems
-        };
-        const createdConference = await apiService.createConference(record);
+          scannedItemsSnapshot: conferenceSession.scannedItems,
+          status: 'DRAFT',
+          createdBy: currentUser ? currentUser.email : 'unknown',
+          lastModifiedBy: currentUser ? currentUser.email : 'unknown',
+          lastModifiedAt: new Date().toISOString()
+        } as any;
+        const createdConference = await apiService.createConference(record as any);
         conferenceId = createdConference.id;
       }
 
-      // 2. Commit changes to backend (new assets, updates, etc.)
-      await apiService.commitConference(conferenceId, {
-        newAssets,
-        updates,
+      // 2. Submit for approval (no asset changes yet)
+      await apiService.submitConference(conferenceId, {
         summary,
-        scannedItemsSnapshot: conferenceSession.scannedItems
+        scannedItemsSnapshot: conferenceSession.scannedItems,
+        submittedBy: currentUser ? currentUser.email : 'unknown'
       });
 
-      // 3. Reload data from backend
-      const updatedAssets = await apiService.getAssets();
-      setAssets(updatedAssets);
-
+      // 3. Reload conference list (assets remain unchanged until approval)
       const updatedConferences = await apiService.getConferences();
       setConferenceHistory(updatedConferences);
-      
+
       // 4. Clear Session (also clears local storage)
       await handleUpdateConferenceSession(null);
-      alert('Conferência salva e finalizada com sucesso!');
+      alert('Conferência enviada para aprovação. Nenhuma alteração aplicada ainda.');
     } catch (error) {
       console.error('Error committing conference:', error);
-      alert('Erro ao salvar conferência. Tente novamente.');
+      alert('Erro ao enviar conferência para aprovação. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -586,10 +626,10 @@ const App: React.FC = () => {
            </div>
         </header>
 
-        {viewMode === ViewMode.DASHBOARD && <Dashboard assets={assets} />}
+        {viewMode === ViewMode.DASHBOARD && <Dashboard assets={visibleAssets} onReloadAssets={reloadAssets} currentUser={currentUser || undefined} />}
         {viewMode === ViewMode.LIST && (
           <AssetTable 
-            assets={assets} 
+            assets={visibleAssets} 
             onUpdateAssets={handleUpdateAssets}
             onViewAsset={(asset) => {
               setSelectedAsset(asset);
@@ -597,7 +637,7 @@ const App: React.FC = () => {
             }}
           />
         )}
-        {viewMode === ViewMode.AI_CHAT && <AIChat assets={assets} />}
+        {viewMode === ViewMode.AI_CHAT && <AIChat assets={visibleAssets} />}
         {viewMode === ViewMode.ADMIN && <AdminPanel />}
         {viewMode === ViewMode.CONFERENCE && (
           <Conference 
@@ -605,7 +645,8 @@ const App: React.FC = () => {
             session={conferenceSession}
             history={conferenceHistory}
             onUpdateSession={handleUpdateConferenceSession}
-            onCommitChanges={handleConferenceCommit} 
+            onCommitChanges={handleConferenceCommit}
+            onReloadAssets={reloadAssets}
           />
         )}
         {viewMode === ViewMode.ASSET_DETAIL && selectedAsset && (
@@ -625,22 +666,11 @@ const App: React.FC = () => {
                 console.error('Error loading asset:', error);
               }
             }}
-            onUpdateAsset={async (updatedAsset) => {
-              try {
-                await apiService.updateAsset(updatedAsset.id, updatedAsset);
-                // Reload all assets to ensure consistency
-                const updatedAssets = await apiService.getAssets();
-                setAssets(updatedAssets);
-                // Update selected asset to show latest data
-                const refreshedAsset = updatedAssets.find(a => a.id === updatedAsset.id);
-                if (refreshedAsset) {
-                  setSelectedAsset(refreshedAsset);
-                }
-              } catch (error) {
-                console.error('Error updating asset:', error);
-                alert('Erro ao atualizar item. Tente novamente.');
-              }
+            onUpdateAsset={async (asset) => {
+              await handleUpdateAssets([asset]);
             }}
+            currentUser={currentUser || undefined}
+            availableLocations={Array.from(new Set(assets.map(a => a.location))).sort()}
           />
         )}
       </main>

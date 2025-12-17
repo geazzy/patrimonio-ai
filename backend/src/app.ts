@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import assetsRouter from './routes/assets.js';
 import conferencesRouter from './routes/conferences.js';
+import locationsRouter from './routes/locations.js';
 import aiRouter from './routes/ai.js';
 import authRouter from './routes/auth.js';
 import adminRouter from './routes/admin.js';
@@ -45,6 +46,7 @@ patrimonioRouter.use('/api/auth', authRouter);
 // Protected API routes (require authentication)
 patrimonioRouter.use('/api/assets', requireAuth, assetsRouter);
 patrimonioRouter.use('/api/conferences', requireAuth, conferencesRouter);
+patrimonioRouter.use('/api/locations', requireAuth, locationsRouter);
 patrimonioRouter.use('/api/ai', requireAuth, aiRouter);
 
 // Admin routes (require authentication + admin role)

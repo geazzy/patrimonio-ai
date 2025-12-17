@@ -66,62 +66,195 @@ router.put('/:id', (req: Request, res: Response) => {
 });
 
 // POST /api/conferences/:id/commit - Commit conference changes
+// Submit conference for admin approval (no asset changes here)
 router.post('/:id/commit', (req: Request, res: Response) => {
   try {
-    const { newAssets, updates, summary, scannedItemsSnapshot } = req.body;
-    
-    // Process new assets
-    if (newAssets && Array.isArray(newAssets) && newAssets.length > 0) {
-      db.bulkUpsertAssets(newAssets);
+    const { summary, scannedItemsSnapshot, submittedBy } = req.body;
+    const id = req.params.id;
+    const conference = db.getConferenceById(id);
+    if (!conference) {
+      return res.status(404).json({ error: 'Conference not found' });
     }
 
-    // Process location updates (moves)
-    if (updates && Array.isArray(updates)) {
-      for (const update of updates) {
-        const asset = db.getAssetById(update.id);
-        if (asset && asset.location !== update.newLocation) {
-          // Add movement history
-          db.addMovementHistory(update.id, [{
-            date: new Date().toLocaleDateString('pt-BR'),
-            fromLocation: asset.location,
-            toLocation: update.newLocation,
-            authorizedBy: 'Conferência'
-          }]);
+    db.updateConference({
+      ...conference,
+      stats: summary || conference.stats,
+      scannedItemsSnapshot: scannedItemsSnapshot || conference.scannedItemsSnapshot,
+      status: 'PENDING_APPROVAL',
+      lastModifiedBy: submittedBy || conference.lastModifiedBy || conference.createdBy,
+      lastModifiedAt: new Date().toISOString()
+    });
 
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error submitting conference for approval:', error);
+    res.status(500).json({ error: 'Failed to submit conference' });
+  }
+});
+
+// Admin approval of conference decisions
+router.post('/:id/approve', (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const { decisions, decidedBy } = req.body as {
+      decisions: Array<{ id: string; type: 'ALIEN' | 'NEW'; decision: 'APPROVE' | 'REJECT'; newLocation?: string; reason?: string }>;
+      decidedBy: string;
+    };
+
+    const conference = db.getConferenceById(id);
+    if (!conference) {
+      return res.status(404).json({ error: 'Conference not found' });
+    }
+
+    const targetLocation = conference.location;
+    const decisionsSnapshot: any[] = [];
+    const summaryLog = { approved: 0, rejected: 0, errors: [] };
+
+    for (const d of decisions || []) {
+      decisionsSnapshot.push(d);
+      
+      if (d.type === 'NEW') {
+        if (d.decision === 'APPROVE') {
+          // Create a new asset
+          const newAsset = {
+            id: d.id,
+            description: (conference.scannedItemsSnapshot.find(i => i.id === d.id)?.description) || 'Item da Conferência',
+            value: 0,
+            valueFormatted: 'R$ 0,00',
+            termDate: new Date().toISOString(),
+            location: targetLocation,
+            responsible: 'A DEFINIR',
+            sector: 'A DEFINIR',
+            category: 'Outros',
+            tags: ['Encontrado na Conferência'],
+            history: []
+          } as Asset;
+          db.createAsset(newAsset);
+          summaryLog.approved++;
+          console.log(`[APPROVE] Created NEW asset: ${d.id} at ${targetLocation}`);
+        } else {
+          // Rejection for NEW: no asset created, capture reason in decisions_snapshot
+          summaryLog.rejected++;
+          console.log(`[REJECT] Rejected NEW item: ${d.id} - Reason: ${d.reason || 'sem motivo'}`);
+          continue;
+        }
+      } else if (d.type === 'ALIEN') {
+        const asset = db.getAssetById(d.id);
+        if (!asset) {
+          summaryLog.errors.push(`Asset ${d.id} not found`);
+          continue;
+        }
+        const toLocation = d.newLocation || targetLocation;
+
+        if (d.decision === 'APPROVE') {
+          // Log decision with conference reference
+          db.addMovementDecision({
+            assetId: d.id,
+            date: new Date().toISOString(),
+            fromLocation: asset.location,
+            toLocation,
+            authorizedBy: decidedBy,
+            conferenceId: id,
+            action: 'APPROVE',
+            decidedBy,
+            decisionDate: new Date().toISOString(),
+            reason: null
+          });
           // Update asset location
-          const updatedAsset = {
+          db.updateAsset({
             ...asset,
-            location: update.newLocation,
+            location: toLocation,
             history: [
               ...asset.history,
               {
-                date: new Date().toLocaleDateString('pt-BR'),
+                date: new Date().toISOString(),
                 fromLocation: asset.location,
-                toLocation: update.newLocation,
-                authorizedBy: 'Conferência'
+                toLocation,
+                authorizedBy: decidedBy
               }
             ]
-          };
-          db.updateAsset(updatedAsset);
+          });
+          summaryLog.approved++;
+          console.log(`[APPROVE] Moved ALIEN asset: ${d.id} from ${asset.location} to ${toLocation}`);
+        } else {
+          // Log rejection decision (no location change)
+          db.addMovementDecision({
+            assetId: d.id,
+            date: new Date().toISOString(),
+            fromLocation: asset.location,
+            toLocation: asset.location, // Remains in same location
+            authorizedBy: decidedBy,
+            conferenceId: id,
+            action: 'REJECT',
+            decidedBy,
+            decisionDate: new Date().toISOString(),
+            reason: d.reason || 'Sem motivo informado'
+          });
+          // Add rejection to asset history (no location change)
+          db.updateAsset({
+            ...asset,
+            history: [
+              ...asset.history,
+              {
+                date: new Date().toISOString(),
+                fromLocation: asset.location,
+                toLocation: asset.location, // Remains in same location
+                authorizedBy: decidedBy,
+                rejected: true,
+                rejectionReason: d.reason || 'Sem motivo informado'
+              }
+            ]
+          });
+          // Do not update asset location
+          summaryLog.rejected++;
+          console.log(`[REJECT] Rejected ALIEN item: ${d.id} - Reason: ${d.reason || 'sem motivo'}`);
         }
       }
     }
 
-    // Update conference record with summary
-    // Update conference record with new summary and snapshot (if provided)
-    const conference = db.getConferenceById(req.params.id);
-    if (conference && summary) {
-      db.updateConferenceSummaryAndSnapshot(
-        req.params.id,
-        summary,
-        scannedItemsSnapshot || conference.scannedItemsSnapshot
-      );
+    // Update conference record to APPROVED and store decisions snapshot
+    db.updateConference({
+      ...conference,
+      decisionsSnapshot,
+      status: 'APPROVED',
+      approvedBy: decidedBy,
+      approvedAt: new Date().toISOString(),
+      lastModifiedBy: decidedBy,
+      lastModifiedAt: new Date().toISOString()
+    });
+
+    console.log(`[CONFERENCE] ${id} approved by ${decidedBy}:`, summaryLog);
+    res.json({ success: true, summary: summaryLog });
+  } catch (error) {
+    console.error('Error approving conference:', error);
+    res.status(500).json({ error: 'Failed to approve conference' });
+  }
+});
+
+// Admin rejects the entire conference, sending back to DRAFT
+router.post('/:id/reject', (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const { reason, decidedBy } = req.body as { reason: string; decidedBy: string };
+    const conference = db.getConferenceById(id);
+    if (!conference) {
+      return res.status(404).json({ error: 'Conference not found' });
     }
+
+    db.updateConference({
+      ...conference,
+      status: 'DRAFT',
+      rejectedBy: decidedBy,
+      rejectedAt: new Date().toISOString(),
+      rejectionReason: reason,
+      lastModifiedBy: decidedBy,
+      lastModifiedAt: new Date().toISOString()
+    });
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error committing conference:', error);
-    res.status(500).json({ error: 'Failed to commit conference' });
+    console.error('Error rejecting conference:', error);
+    res.status(500).json({ error: 'Failed to reject conference' });
   }
 });
 

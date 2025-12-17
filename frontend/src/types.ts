@@ -3,6 +3,8 @@ export interface MovementHistory {
   fromLocation: string;
   toLocation: string;
   authorizedBy: string;
+  rejected?: boolean;
+  rejectionReason?: string;
 }
 
 export interface Asset {
@@ -81,6 +83,22 @@ export interface ConferenceRecord {
     missing: number;
   };
   scannedItemsSnapshot: ScannedItem[];
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  createdBy: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectionReason?: string;
+  rejectedAt?: string;
+  lastModifiedBy: string;
+  lastModifiedAt: string;
+  decisionsSnapshot?: Array<{
+    id: string;
+    type: 'ALIEN' | 'NEW';
+    decision: 'APPROVE' | 'REJECT';
+    newLocation?: string;
+    reason?: string;
+  }>;
 }
 
 // Auth types

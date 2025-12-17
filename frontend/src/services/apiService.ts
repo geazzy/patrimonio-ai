@@ -44,6 +44,16 @@ export interface ConferenceRecord {
     missing: number;
   };
   scannedItemsSnapshot: any[];
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  createdBy: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectionReason?: string;
+  rejectedAt?: string;
+  lastModifiedBy: string;
+  lastModifiedAt: string;
+  decisionsSnapshot?: Array<{ id: string; type: 'ALIEN' | 'NEW'; decision: 'APPROVE' | 'REJECT'; newLocation?: string; reason?: string }>;
 }
 
 export interface User {
@@ -245,13 +255,12 @@ export const apiService = {
     return handleResponse<ConferenceRecord>(response);
   },
 
-  async commitConference(
+  async submitConference(
     id: string,
     data: {
-      newAssets: Asset[];
-      updates: Array<{ id: string; newLocation: string }>;
       summary: { matches: number; aliens: number; newItems: number; missing: number };
       scannedItemsSnapshot?: any[];
+      submittedBy: string;
     }
   ): Promise<{ success: boolean }> {
     const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${id}/commit`, {
@@ -261,6 +270,40 @@ export const apiService = {
       body: JSON.stringify(data)
     });
     return handleResponse<{ success: boolean }>(response);
+  },
+
+  async approveConference(
+    id: string,
+    payload: { decisions: Array<{ id: string; type: 'ALIEN' | 'NEW'; decision: 'APPROVE' | 'REJECT'; newLocation?: string; reason?: string }>; decidedBy: string }
+  ): Promise<{ success: boolean }> {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    return handleResponse<{ success: boolean }>(response);
+  },
+
+  async rejectConference(id: string, payload: { reason: string; decidedBy: string }): Promise<{ success: boolean }> {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    return handleResponse<{ success: boolean }>(response);
+  },
+
+  // Locations
+  async createLocation(name: string): Promise<{ success: boolean; location: string; assetId: string }> {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/locations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name })
+    });
+    return handleResponse<{ success: boolean; location: string; assetId: string }>(response);
   },
 
   // AI operations

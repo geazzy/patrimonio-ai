@@ -3,6 +3,8 @@ export interface MovementHistory {
   fromLocation: string;
   toLocation: string;
   authorizedBy: string;
+  rejected?: boolean;
+  rejectionReason?: string;
 }
 
 export interface Asset {
@@ -44,6 +46,8 @@ export interface ScannedItem {
   isResolved?: boolean;
 }
 
+export type ConferenceStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+
 export interface ConferenceRecord {
   id: string;
   date: string;
@@ -55,6 +59,22 @@ export interface ConferenceRecord {
     missing: number;
   };
   scannedItemsSnapshot: ScannedItem[];
+  status: ConferenceStatus;
+  createdBy: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectionReason?: string;
+  rejectedAt?: string;
+  lastModifiedBy: string;
+  lastModifiedAt: string;
+  decisionsSnapshot?: Array<{
+    id: string;
+    type: 'ALIEN' | 'NEW';
+    decision: 'APPROVE' | 'REJECT';
+    newLocation?: string;
+    reason?: string;
+  }>;
 }
 
 // Authentication types

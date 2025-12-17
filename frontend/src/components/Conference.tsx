@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Asset, ScannedItem, ScanStatus, ConferenceSession, ConferenceRecord } from '../types';
 import { QrCode, CheckCircle, AlertTriangle, HelpCircle, ArrowRight, MapPin, X, Save, RotateCcw, ChevronLeft, Trash2, Calendar, ClipboardList, Plus, Eye } from 'lucide-react';
+import apiService from '../services/apiService';
 
 interface ConferenceProps {
   assets: Asset[];
@@ -12,15 +13,18 @@ interface ConferenceProps {
     updates: { id: string, newLocation: string }[],
     summary: { matches: number; aliens: number; newItems: number; missing: number }
   ) => void;
+  onReloadAssets?: () => Promise<void>;
 }
 
-export const Conference: React.FC<ConferenceProps> = ({ assets, session, history, onUpdateSession, onCommitChanges }) => {
+export const Conference: React.FC<ConferenceProps> = ({ assets, session, history, onUpdateSession, onCommitChanges, onReloadAssets }) => {
   // View State: 'LIST' (History) or 'SETUP' (New Conf). If session exists, this is ignored.
   const [localView, setLocalView] = useState<'LIST' | 'SETUP'>('LIST');
   const [selectedRecord, setSelectedRecord] = useState<ConferenceRecord | null>(null);
 
   // Local state for Setup input
   const [setupLocation, setSetupLocation] = useState('');
+  const [showNewLocationModal, setShowNewLocationModal] = useState(false);
+  const [newLocationName, setNewLocationName] = useState('');
   
   // Scanning Inputs
   const [inputId, setInputId] = useState('');
@@ -63,6 +67,39 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
   const updateSession = (updates: Partial<ConferenceSession>) => {
     if (session) {
       onUpdateSession({ ...session, ...updates });
+    }
+  };
+
+  const validateLocationFormat = (location: string): boolean => {
+    // Format: "ANDAR-SETOR", 5-10 characters, uppercase
+    const pattern = /^[A-Z0-9]{2,10}(-[A-Z0-9]{2,10})?$/;
+    return pattern.test(location) && location.length >= 3 && location.length <= 10;
+  };
+
+  const handleCreateNewLocation = async () => {
+    const trimmedName = newLocationName.trim().toUpperCase();
+    
+    if (!validateLocationFormat(trimmedName)) {
+      alert('Formato inválido. Use formato como "E-101" (maiúsculas, 3-10 caracteres)');
+      return;
+    }
+
+    try {
+      // Call backend to create location
+      await apiService.createLocation(trimmedName);
+      
+      // Reload assets to update available locations
+      if (onReloadAssets) {
+        await onReloadAssets();
+      }
+      
+      // Set as selected and close modal
+      setSetupLocation(trimmedName);
+      setNewLocationName('');
+      setShowNewLocationModal(false);
+      alert(`Local "${trimmedName}" criado com sucesso!`);
+    } catch (error: any) {
+      alert(`Erro ao criar local: ${error.message || 'Tente novamente'}`);
     }
   };
 
@@ -143,6 +180,22 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
     setNewItemDesc('');
     setShowNewItemModal(false);
     setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const handleRemoveItem = (itemId: string) => {
+    if (confirm(`Remover item ${itemId} da conferência?`)) {
+      if (session) {
+        const updatedItems = session.scannedItems.filter(item => item.id !== itemId);
+        onUpdateSession({
+          ...session,
+          scannedItems: updatedItems
+        });
+        // Remove from transfer selection if present
+        const newTransfers = new Set(selectedTransfers);
+        newTransfers.delete(itemId);
+        setSelectedTransfers(newTransfers);
+      }
+    }
   };
 
   const handleToggleTransfer = (id: string) => {
@@ -285,6 +338,7 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                   <tr>
                     <th className="p-4">Data</th>
                     <th className="p-4">Local</th>
+                    <th className="p-4">Status</th>
                     <th className="p-4 text-center">Encontrados</th>
                     <th className="p-4 text-center">Ausentes</th>
                     <th className="p-4 text-center">Divergentes</th>
@@ -306,6 +360,20 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                         </span>
                       </td>
                       <td className="p-4 font-medium text-slate-800">{record.location}</td>
+                      <td className="p-4">
+                        {record.status === 'DRAFT' && (
+                          <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 border border-slate-200">Rascunho</span>
+                        )}
+                        {record.status === 'PENDING_APPROVAL' && (
+                          <span className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700 border border-amber-200">Pendente</span>
+                        )}
+                        {record.status === 'APPROVED' && (
+                          <span className="text-xs px-2 py-1 rounded bg-green-50 text-green-700 border border-green-200">Aprovado</span>
+                        )}
+                        {record.status === 'REJECTED' && (
+                          <span title={record.rejectionReason || ''} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200">Rejeitado</span>
+                        )}
+                      </td>
                       <td className="p-4 text-center text-green-600 font-bold bg-green-50/50">{record.stats.matches}</td>
                       <td className="p-4 text-center text-red-600 font-bold bg-red-50/50">{record.stats.missing}</td>
                       <td className="p-4 text-center text-amber-600 font-bold bg-amber-50/50">{record.stats.aliens}</td>
@@ -389,44 +457,90 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
 
     // SETUP VIEW
     return (
-      <div className="p-6 max-w-md mx-auto animate-fade-in flex flex-col h-[calc(100vh-100px)] justify-center">
-        <button 
-          onClick={() => setLocalView('LIST')} 
-          className="self-start mb-6 text-slate-500 hover:text-slate-800 flex items-center gap-1"
-        >
-          <ChevronLeft size={20} /> Voltar
-        </button>
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
-            <QrCode size={32} />
-          </div>
-          <h2 className="text-2xl font-bold text-slate-800">Nova Conferência</h2>
-          <p className="text-slate-500">Selecione o local para iniciar a auditoria.</p>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Local da Conferência</label>
-            <select
-              className="w-full p-3 border border-slate-300 rounded-xl bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              value={setupLocation}
-              onChange={(e) => setSetupLocation(e.target.value)}
-            >
-              <option value="">Selecione um local...</option>
-              {availableLocations.map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            onClick={handleStart}
-            disabled={!setupLocation}
-            className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2"
+      <div>
+        <div className="p-6 max-w-md mx-auto animate-fade-in flex flex-col h-[calc(100vh-100px)] justify-center">
+          <button 
+            onClick={() => setLocalView('LIST')} 
+            className="self-start mb-6 text-slate-500 hover:text-slate-800 flex items-center gap-1"
           >
-            Iniciar Conferência <ArrowRight size={20} />
+            <ChevronLeft size={20} /> Voltar
           </button>
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
+              <QrCode size={32} />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800">Nova Conferência</h2>
+            <p className="text-slate-500">Selecione o local para iniciar a auditoria.</p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Local da Conferência</label>
+              <select
+                className="w-full p-3 border border-slate-300 rounded-xl bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                value={setupLocation}
+                onChange={(e) => setSetupLocation(e.target.value)}
+              >
+                <option value="">Selecione um local...</option>
+                {availableLocations.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowNewLocationModal(true)}
+                className="mt-2 text-xs text-blue-600 hover:underline"
+              >
+                Criar novo local
+              </button>
+            </div>
+
+            <button
+              onClick={handleStart}
+              disabled={!setupLocation}
+              className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2"
+            >
+              Iniciar Conferência <ArrowRight size={20} />
+            </button>
+          </div>
         </div>
+
+        {/* Modal to create a new location */}
+        {showNewLocationModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 animate-bounce-in">
+              <div className="flex items-center gap-3 mb-4 text-blue-600">
+                <MapPin size={28} />
+                <h3 className="text-lg font-bold text-slate-800">Novo Local</h3>
+              </div>
+              <p className="text-slate-600 mb-4 text-sm">
+                Informe o identificador do novo local. Ex.: <b>E-101</b>
+              </p>
+              <input
+                type="text"
+                autoFocus
+                className="w-full p-3 border border-slate-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 outline-none uppercase"
+                placeholder="Ex: E-101"
+                value={newLocationName}
+                onChange={(e) => setNewLocationName(e.target.value.toUpperCase())}
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowNewLocationModal(false)}
+                  className="flex-1 py-2 text-slate-500 hover:bg-slate-100 rounded-lg"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateNewLocation}
+                  className="flex-1 py-2 bg-blue-600 text-white font-medium rounded-lg shadow-sm"
+                >
+                  Criar & Selecionar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -477,11 +591,11 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
           {scannedItems.map((item, idx) => (
             <div key={idx} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 animate-fade-in-up">
               <div className="flex justify-between items-start">
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 flex-1">
                    {item.status === 'MATCH' && <CheckCircle className="text-green-500 mt-1" size={20} />}
                    {item.status === 'ALIEN' && <AlertTriangle className="text-amber-500 mt-1" size={20} />}
                    {item.status === 'NEW' && <HelpCircle className="text-blue-500 mt-1" size={20} />}
-                   <div>
+                   <div className="flex-1">
                      <p className="font-mono text-xs font-bold text-slate-500">#{item.id}</p>
                      <p className="font-medium text-slate-800 leading-tight">{item.description}</p>
                      {item.status === 'ALIEN' && (
@@ -491,7 +605,16 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                      )}
                    </div>
                 </div>
-                <span className="text-xs text-slate-400">{item.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                <div className="flex items-center gap-2 ml-2">
+                  <span className="text-xs text-slate-400 whitespace-nowrap">{item.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                  <button
+                    onClick={() => handleRemoveItem(item.id)}
+                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Remover item"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -713,12 +836,12 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                  className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 flex items-center gap-2"
                >
                  <Save size={18} />
-                 Salvar & Finalizar
+                  Enviar para Aprovação
                </button>
              </div>
          </div>
          <p className="text-center text-xs text-slate-400 mt-2">
-           Ao salvar, os itens novos e as transferências marcadas serão aplicados e a conferência será arquivada no histórico.
+           Ao salvar, a conferência será enviada para aprovação do admin. Nenhuma alteração será aplicada até aprovação.
          </p>
        </div>
      )

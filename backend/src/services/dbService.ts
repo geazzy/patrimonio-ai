@@ -58,8 +58,14 @@ class DatabaseService {
         from_location TEXT NOT NULL,
         to_location TEXT NOT NULL,
         authorized_by TEXT,
+        conference_id TEXT,
+        action TEXT,
+        decided_by TEXT,
+        decision_date DATETIME,
+        reason TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+        FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+        FOREIGN KEY (conference_id) REFERENCES conference_records(id) ON DELETE SET NULL
       )
     `);
 
@@ -74,9 +80,50 @@ class DatabaseService {
         stats_new_items INTEGER DEFAULT 0,
         stats_missing INTEGER DEFAULT 0,
         scanned_items_snapshot TEXT,
+        decisions_snapshot TEXT,
+        status TEXT DEFAULT 'DRAFT',
+        created_by TEXT NOT NULL,
+        approved_by TEXT,
+        approved_at DATETIME,
+        rejected_by TEXT,
+        rejection_reason TEXT,
+        rejected_at DATETIME,
+        last_modified_by TEXT NOT NULL,
+        last_modified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Ensure columns exist in older databases (simple migration)
+    const pragmaInfo = (table: string) => this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    const hasColumn = (cols: Array<{ name: string }>, name: string) => cols.some(c => c.name === name);
+
+    // conference_records columns
+    {
+      const cols = pragmaInfo('conference_records');
+      const addColumn = (sql: string) => { try { this.db.exec(sql); } catch { /* noop */ } };
+      if (!hasColumn(cols, 'decisions_snapshot')) addColumn("ALTER TABLE conference_records ADD COLUMN decisions_snapshot TEXT");
+      if (!hasColumn(cols, 'status')) addColumn("ALTER TABLE conference_records ADD COLUMN status TEXT DEFAULT 'DRAFT'");
+      if (!hasColumn(cols, 'created_by')) addColumn("ALTER TABLE conference_records ADD COLUMN created_by TEXT");
+      if (!hasColumn(cols, 'approved_by')) addColumn("ALTER TABLE conference_records ADD COLUMN approved_by TEXT");
+      if (!hasColumn(cols, 'approved_at')) addColumn("ALTER TABLE conference_records ADD COLUMN approved_at DATETIME");
+      if (!hasColumn(cols, 'rejected_by')) addColumn("ALTER TABLE conference_records ADD COLUMN rejected_by TEXT");
+      if (!hasColumn(cols, 'rejection_reason')) addColumn("ALTER TABLE conference_records ADD COLUMN rejection_reason TEXT");
+      if (!hasColumn(cols, 'rejected_at')) addColumn("ALTER TABLE conference_records ADD COLUMN rejected_at DATETIME");
+      if (!hasColumn(cols, 'last_modified_by')) addColumn("ALTER TABLE conference_records ADD COLUMN last_modified_by TEXT");
+      if (!hasColumn(cols, 'last_modified_at')) addColumn("ALTER TABLE conference_records ADD COLUMN last_modified_at DATETIME");
+    }
+
+    // movement_history columns
+    {
+      const cols = pragmaInfo('movement_history');
+      const addColumn = (sql: string) => { try { this.db.exec(sql); } catch { /* noop */ } };
+      if (!hasColumn(cols, 'conference_id')) addColumn("ALTER TABLE movement_history ADD COLUMN conference_id TEXT");
+      if (!hasColumn(cols, 'action')) addColumn("ALTER TABLE movement_history ADD COLUMN action TEXT");
+      if (!hasColumn(cols, 'decided_by')) addColumn("ALTER TABLE movement_history ADD COLUMN decided_by TEXT");
+      if (!hasColumn(cols, 'decision_date')) addColumn("ALTER TABLE movement_history ADD COLUMN decision_date DATETIME");
+      if (!hasColumn(cols, 'reason')) addColumn("ALTER TABLE movement_history ADD COLUMN reason TEXT");
+    }
 
     // Create indexes
     this.db.exec(`
@@ -304,6 +351,40 @@ class DatabaseService {
     transaction(history);
   }
 
+  // Extended movement decision logging for admin approvals
+  addMovementDecision(entry: {
+    assetId: string;
+    date: string;
+    fromLocation: string;
+    toLocation: string;
+    authorizedBy: string;
+    conferenceId: string;
+    action: 'APPROVE' | 'REJECT';
+    decidedBy: string;
+    decisionDate: string;
+    reason?: string;
+  }): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO movement_history (
+        asset_id, date, from_location, to_location, authorized_by,
+        conference_id, action, decided_by, decision_date, reason
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      entry.assetId,
+      entry.date,
+      entry.fromLocation,
+      entry.toLocation,
+      entry.authorizedBy,
+      entry.conferenceId,
+      entry.action,
+      entry.decidedBy,
+      entry.decisionDate,
+      entry.reason || null
+    );
+  }
+
   // Conference operations
   getAllConferences(): ConferenceRecord[] {
     const stmt = this.db.prepare('SELECT * FROM conference_records ORDER BY created_at DESC');
@@ -321,7 +402,19 @@ class DatabaseService {
       },
       scannedItemsSnapshot: record.scanned_items_snapshot 
         ? JSON.parse(record.scanned_items_snapshot) 
-        : []
+        : [],
+      decisionsSnapshot: record.decisions_snapshot
+        ? JSON.parse(record.decisions_snapshot)
+        : undefined,
+      status: record.status || 'DRAFT',
+      createdBy: record.created_by,
+      approvedBy: record.approved_by,
+      approvedAt: record.approved_at,
+      rejectedBy: record.rejected_by,
+      rejectionReason: record.rejection_reason,
+      rejectedAt: record.rejected_at,
+      lastModifiedBy: record.last_modified_by,
+      lastModifiedAt: record.last_modified_at
     }));
   }
 
@@ -343,14 +436,26 @@ class DatabaseService {
       },
       scannedItemsSnapshot: record.scanned_items_snapshot 
         ? JSON.parse(record.scanned_items_snapshot) 
-        : []
+        : [],
+      decisionsSnapshot: record.decisions_snapshot
+        ? JSON.parse(record.decisions_snapshot)
+        : undefined,
+      status: record.status || 'DRAFT',
+      createdBy: record.created_by,
+      approvedBy: record.approved_by,
+      approvedAt: record.approved_at,
+      rejectedBy: record.rejected_by,
+      rejectionReason: record.rejection_reason,
+      rejectedAt: record.rejected_at,
+      lastModifiedBy: record.last_modified_by,
+      lastModifiedAt: record.last_modified_at
     };
   }
 
   createConference(conference: ConferenceRecord): void {
     const stmt = this.db.prepare(`
-      INSERT INTO conference_records (id, date, location, stats_matches, stats_aliens, stats_new_items, stats_missing, scanned_items_snapshot)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO conference_records (id, date, location, stats_matches, stats_aliens, stats_new_items, stats_missing, scanned_items_snapshot, decisions_snapshot, status, created_by, last_modified_by, last_modified_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -361,7 +466,12 @@ class DatabaseService {
       conference.stats.aliens,
       conference.stats.newItems,
       conference.stats.missing,
-      JSON.stringify(conference.scannedItemsSnapshot)
+      JSON.stringify(conference.scannedItemsSnapshot),
+      conference.decisionsSnapshot ? JSON.stringify(conference.decisionsSnapshot) : null,
+      conference.status || 'DRAFT',
+      conference.createdBy,
+      conference.lastModifiedBy,
+      new Date().toISOString()
     );
   }
 
@@ -376,7 +486,16 @@ class DatabaseService {
         stats_new_items = ?,
         stats_missing = ?,
         scanned_items_snapshot = ?,
-        created_at = created_at -- keep original created_at
+        decisions_snapshot = ?,
+        status = ?,
+        approved_by = ?,
+        approved_at = ?,
+        rejected_by = ?,
+        rejection_reason = ?,
+        rejected_at = ?,
+        last_modified_by = ?,
+        last_modified_at = ?,
+        created_at = created_at
       WHERE id = ?
     `);
 
@@ -388,6 +507,15 @@ class DatabaseService {
       conference.stats.newItems,
       conference.stats.missing,
       JSON.stringify(conference.scannedItemsSnapshot),
+      conference.decisionsSnapshot ? JSON.stringify(conference.decisionsSnapshot) : null,
+      conference.status || 'DRAFT',
+      conference.approvedBy || null,
+      conference.approvedAt || null,
+      conference.rejectedBy || null,
+      conference.rejectionReason || null,
+      conference.rejectedAt || null,
+      conference.lastModifiedBy,
+      new Date().toISOString(),
       conference.id
     );
   }
