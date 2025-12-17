@@ -108,7 +108,7 @@ router.post('/:id/approve', (req: Request, res: Response) => {
 
     const targetLocation = conference.location;
     const decisionsSnapshot: any[] = [];
-    const summaryLog = { approved: 0, rejected: 0, errors: [] };
+    const summaryLog: { approved: number; rejected: number; errors: string[] } = { approved: 0, rejected: 0, errors: [] };
 
     for (const d of decisions || []) {
       decisionsSnapshot.push(d);
@@ -158,7 +158,7 @@ router.post('/:id/approve', (req: Request, res: Response) => {
             action: 'APPROVE',
             decidedBy,
             decisionDate: new Date().toISOString(),
-            reason: null
+            reason: undefined
           });
           // Update asset location
           db.updateAsset({
