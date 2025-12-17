@@ -254,6 +254,47 @@ const handleUpdateAssets = async (updatedAssets: Asset[]) => {
 
 ---
 
+### 5. **Componente Conference - Input Mobile Otimizado**
+**Arquivo:** `frontend/src/components/Conference.tsx`
+
+#### Problema: Campo de entrada coberto pelo teclado virtual em mobile
+
+**Solução:** Input com `position: sticky` dentro do container scrollável
+
+```typescript
+{/* Input Area - Inside Scrollable (Mobile Optimal) */}
+<div className="sticky bottom-0 left-0 right-0 bg-white p-4 border-t border-slate-200 shadow-lg z-30 mt-4 rounded-xl">
+  <div className="flex gap-2">
+    <input
+      ref={inputRef}
+      type="text" 
+      inputMode="numeric"
+      value={inputId}
+      onChange={(e) => setInputId(e.target.value)}
+      placeholder="Digitar ou Ler Tombo..."
+      className="flex-1 p-4 text-lg border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+      onKeyDown={(e) => e.key === 'Enter' && processScan(inputId)}
+      autoComplete="off"
+    />
+    <button
+      onClick={() => processScan(inputId)}
+      className="px-6 bg-blue-600 text-white rounded-xl font-bold shadow-md active:scale-95 transition-transform"
+    >
+      OK
+    </button>
+  </div>
+</div>
+```
+
+**Vantagens:**
+- ✅ Input scrollável naturalmente quando teclado abre
+- ✅ Sem conflito de z-index ou overlay
+- ✅ Comportamento nativo do navegador
+- ✅ Melhor UX em dispositivos móveis
+- ✅ Input sempre acessível junto com teclado
+
+---
+
 ## 🗄️ Banco de Dados
 
 ### Tabela: `movement_history`
@@ -345,6 +386,10 @@ interface MovementHistory {
 **Problema:** Sessão perdia após 15min de inatividade
 **Solução:** Auto-refresh + timeout aumentado para 2h
 
+### Bug 5: Campo de entrada coberto pelo teclado em mobile
+**Problema:** Input `fixed` ficava atrás do teclado virtual em mobile
+**Solução:** Input com `sticky` dentro do container scrollável
+
 ---
 
 ## ✨ Novas Funcionalidades
@@ -368,6 +413,12 @@ interface MovementHistory {
 - Badge "Movimentação rejeitada"
 - Mostra motivo de rejeição
 - Diferencia visualmente de aprovações
+
+### ✅ Input Mobile Otimizado
+- Campo de entrada acessível com teclado virtual
+- Comportamento nativo do navegador
+- Scroll automático quando teclado abre
+- Sem conflito de z-index ou overlay
 
 ---
 
@@ -396,6 +447,14 @@ interface MovementHistory {
 3. Alterar timeout do token → testar novo limite
 ```
 
+### Teste 4: Input Mobile
+```
+1. Acessar conferência em mobile
+2. Abrir teclado virtual no campo
+3. Campo deve scrollar junto com teclado
+4. Input sempre deve estar visível e acessível
+```
+
 ---
 
 ## 📁 Arquivos Modificados
@@ -407,7 +466,7 @@ interface MovementHistory {
 ### Frontend
 - `src/services/apiService.ts` - Auto-refresh
 - `src/components/AssetDetail.tsx` - Edição com permissões
-- `src/components/Conference.tsx` - Remover items
+- `src/components/Conference.tsx` - Remover items, input mobile otimizado
 - `src/App.tsx` - Atualização com API call
 
 ### Novos Arquivos
