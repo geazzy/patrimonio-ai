@@ -67,6 +67,7 @@ export interface ConferenceSession {
   scannedItems: ScannedItem[];
   startTime: Date;
   stage: 'SETUP' | 'SCANNING' | 'REPORT';
+  conferenceId?: string;
 }
 
 export interface ConferenceRecord {

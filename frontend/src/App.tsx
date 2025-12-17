@@ -43,6 +43,33 @@ const App: React.FC = () => {
         // Load conference history from backend
         const loadedConferences = await apiService.getConferences();
         setConferenceHistory(loadedConferences);
+
+        // Try to restore active conference session from localStorage
+        const storedActiveId = localStorage.getItem('activeConferenceId');
+        const storedStage = localStorage.getItem('activeConferenceStage') as ConferenceSession['stage'] | null;
+        const storedLocation = localStorage.getItem('activeConferenceLocation');
+
+        if (storedActiveId && storedLocation) {
+          try {
+            const active = await apiService.getConference(storedActiveId);
+            const restoredItems = (active.scannedItemsSnapshot || []).map((it: any) => ({
+              ...it,
+              timestamp: new Date(it.timestamp)
+            }));
+            setConferenceSession({
+              targetLocation: active.location,
+              scannedItems: restoredItems,
+              startTime: new Date(active.date),
+              stage: storedStage || 'SCANNING',
+              conferenceId: active.id
+            });
+          } catch (e) {
+            // If cannot restore, clear invalid keys
+            localStorage.removeItem('activeConferenceId');
+            localStorage.removeItem('activeConferenceStage');
+            localStorage.removeItem('activeConferenceLocation');
+          }
+        }
       } catch (error) {
         console.error("Error loading data from backend:", error);
         alert('Erro ao carregar dados do servidor. Verifique se o backend está rodando.');
@@ -53,6 +80,78 @@ const App: React.FC = () => {
 
     loadData();
   }, []);
+
+  // Helper to compute summary from a session
+  const computeSummary = (session: ConferenceSession) => {
+    const scannedItems = session.scannedItems;
+    const matches = scannedItems.filter(i => i.status === 'MATCH').length;
+    const aliens = scannedItems.filter(i => i.status === 'ALIEN').length;
+    const newItems = scannedItems.filter(i => i.status === 'NEW').length;
+    const expectedAtLocation = assets.filter(a => a.location === session.targetLocation);
+    const scannedIds = new Set(scannedItems.map(i => i.id));
+    const missing = expectedAtLocation.filter(a => !scannedIds.has(a.id)).length;
+    return { matches, aliens, newItems, missing };
+  };
+
+  // Persist active session metadata locally
+  const persistActiveSessionMeta = (s: ConferenceSession | null) => {
+    if (!s) {
+      localStorage.removeItem('activeConferenceId');
+      localStorage.removeItem('activeConferenceStage');
+      localStorage.removeItem('activeConferenceLocation');
+      return;
+    }
+    if (s.conferenceId) localStorage.setItem('activeConferenceId', s.conferenceId);
+    localStorage.setItem('activeConferenceStage', s.stage);
+    localStorage.setItem('activeConferenceLocation', s.targetLocation);
+  };
+
+  // Update session handler with incremental persistence
+  const handleUpdateConferenceSession = async (session: ConferenceSession | null) => {
+    // Update UI state immediately
+    setConferenceSession(session);
+    persistActiveSessionMeta(session);
+
+    // If clearing session, nothing else to do
+    if (!session) {
+      return;
+    }
+
+    try {
+      // Ensure there is a conference record
+      let conferenceId = session.conferenceId;
+      const summary = computeSummary(session);
+
+      if (!conferenceId) {
+        const newRecord: ConferenceRecord = {
+          id: crypto.randomUUID(),
+          date: new Date().toISOString(),
+          location: session.targetLocation,
+          stats: summary,
+          scannedItemsSnapshot: session.scannedItems
+        };
+        const created = await apiService.createConference(newRecord);
+        conferenceId = created.id;
+
+        // Attach id to the session in state and localStorage
+        setConferenceSession(prev => prev ? { ...prev, conferenceId } : prev);
+        localStorage.setItem('activeConferenceId', conferenceId);
+      } else {
+        // Update existing conference with latest snapshot and stats
+        const record: ConferenceRecord = {
+          id: conferenceId,
+          date: new Date().toISOString(),
+          location: session.targetLocation,
+          stats: summary,
+          scannedItemsSnapshot: session.scannedItems
+        };
+        await apiService.updateConference(record);
+      }
+    } catch (err) {
+      console.error('Erro ao salvar progresso da conferência:', err);
+      // Non-blocking: keep UI responsive even if transient failure
+    }
+  };
 
   const handleUpdateAssets = (updatedAssets: Asset[]) => {
     setAssets(prevAssets => {
@@ -69,9 +168,24 @@ const App: React.FC = () => {
     try {
       setIsLoading(true);
 
-      // 1. Create conference record first
+      // 1. Determine conference record (new or existing)
       let conferenceId: string;
-      if (conferenceSession) {
+      if (!conferenceSession) throw new Error('No conference session');
+
+      if (conferenceSession.conferenceId) {
+        // Continuation/editing existing conference
+        conferenceId = conferenceSession.conferenceId;
+        // Optionally update the conference record pre-commit (keep date as now)
+        const record: ConferenceRecord = {
+          id: conferenceId,
+          date: new Date().toISOString(),
+          location: conferenceSession.targetLocation,
+          stats: summary,
+          scannedItemsSnapshot: conferenceSession.scannedItems
+        };
+        await apiService.updateConference(record);
+      } else {
+        // Create new conference
         const record: ConferenceRecord = {
           id: crypto.randomUUID(),
           date: new Date().toISOString(),
@@ -79,18 +193,16 @@ const App: React.FC = () => {
           stats: summary,
           scannedItemsSnapshot: conferenceSession.scannedItems
         };
-        
         const createdConference = await apiService.createConference(record);
         conferenceId = createdConference.id;
-      } else {
-        throw new Error('No conference session');
       }
 
       // 2. Commit changes to backend (new assets, updates, etc.)
       await apiService.commitConference(conferenceId, {
         newAssets,
         updates,
-        summary
+        summary,
+        scannedItemsSnapshot: conferenceSession.scannedItems
       });
 
       // 3. Reload data from backend
@@ -100,8 +212,8 @@ const App: React.FC = () => {
       const updatedConferences = await apiService.getConferences();
       setConferenceHistory(updatedConferences);
       
-      // 4. Clear Session
-      setConferenceSession(null);
+      // 4. Clear Session (also clears local storage)
+      await handleUpdateConferenceSession(null);
       alert('Conferência salva e finalizada com sucesso!');
     } catch (error) {
       console.error('Error committing conference:', error);
@@ -492,7 +604,7 @@ const App: React.FC = () => {
             assets={assets} 
             session={conferenceSession}
             history={conferenceHistory}
-            onUpdateSession={setConferenceSession}
+            onUpdateSession={handleUpdateConferenceSession}
             onCommitChanges={handleConferenceCommit} 
           />
         )}

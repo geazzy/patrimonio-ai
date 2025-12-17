@@ -42,10 +42,33 @@ router.post('/', (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/conferences/:id - Update existing conference (stats/snapshot/location/date)
+router.put('/:id', (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const existing = db.getConferenceById(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Conference not found' });
+    }
+
+    const payload: ConferenceRecord = req.body;
+    if (payload.id !== id) {
+      return res.status(400).json({ error: 'ID mismatch between URL and payload' });
+    }
+
+    db.updateConference(payload);
+    const updated = db.getConferenceById(id);
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating conference:', error);
+    res.status(500).json({ error: 'Failed to update conference' });
+  }
+});
+
 // POST /api/conferences/:id/commit - Commit conference changes
 router.post('/:id/commit', (req: Request, res: Response) => {
   try {
-    const { newAssets, updates, summary } = req.body;
+    const { newAssets, updates, summary, scannedItemsSnapshot } = req.body;
     
     // Process new assets
     if (newAssets && Array.isArray(newAssets) && newAssets.length > 0) {
@@ -85,14 +108,14 @@ router.post('/:id/commit', (req: Request, res: Response) => {
     }
 
     // Update conference record with summary
+    // Update conference record with new summary and snapshot (if provided)
     const conference = db.getConferenceById(req.params.id);
-    if (conference) {
-      const updatedConference: ConferenceRecord = {
-        ...conference,
-        stats: summary || conference.stats
-      };
-      // Note: We'd need an update method in dbService for this
-      // For now, the conference is already created with the correct stats
+    if (conference && summary) {
+      db.updateConferenceSummaryAndSnapshot(
+        req.params.id,
+        summary,
+        scannedItemsSnapshot || conference.scannedItemsSnapshot
+      );
     }
 
     res.json({ success: true });
