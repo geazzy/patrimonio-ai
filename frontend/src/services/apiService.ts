@@ -64,6 +64,37 @@ export interface User {
   isApproved: boolean;
 }
 
+// Helper function to make requests with auto-refresh on 401
+async function fetchWithRefresh(
+  url: string,
+  options?: RequestInit
+): Promise<Response> {
+  let response = await fetch(url, options);
+  
+  // If token expired, try to refresh and retry
+  if (response.status === 401) {
+    try {
+      const refreshResponse = await fetch(`${API_URL}${API_PREFIX}/api/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      if (refreshResponse.ok) {
+        // Token refreshed, retry original request
+        response = await fetch(url, options);
+      } else {
+        // Refresh failed, redirect to login
+        window.location.href = '/patrimonio/';
+      }
+    } catch (error) {
+      // Refresh error, redirect to login
+      window.location.href = '/patrimonio/';
+    }
+  }
+  
+  return response;
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
@@ -150,7 +181,7 @@ export const apiService = {
 
   // Get all assets
   async getAssets(): Promise<Asset[]> {
-    const response = await fetch(`${API_URL}${API_PREFIX}/api/assets`, {
+    const response = await fetchWithRefresh(`${API_URL}${API_PREFIX}/api/assets`, {
       credentials: 'include'
     });
     return handleResponse<Asset[]>(response);
@@ -177,7 +208,7 @@ export const apiService = {
 
   // Update asset
   async updateAsset(id: string, asset: Partial<Asset>): Promise<Asset> {
-    const response = await fetch(`${API_URL}${API_PREFIX}/api/assets/${id}`, {
+    const response = await fetchWithRefresh(`${API_URL}${API_PREFIX}/api/assets/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -222,14 +253,14 @@ export const apiService = {
 
   // Conference operations
   async getConferences(): Promise<ConferenceRecord[]> {
-    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences`, {
+    const response = await fetchWithRefresh(`${API_URL}${API_PREFIX}/api/conferences`, {
       credentials: 'include'
     });
     return handleResponse<ConferenceRecord[]>(response);
   },
 
   async getConference(id: string): Promise<ConferenceRecord> {
-    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${id}`, {
+    const response = await fetchWithRefresh(`${API_URL}${API_PREFIX}/api/conferences/${id}`, {
       credentials: 'include'
     });
     return handleResponse<ConferenceRecord>(response);
@@ -263,7 +294,7 @@ export const apiService = {
       submittedBy: string;
     }
   ): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${id}/commit`, {
+    const response = await fetchWithRefresh(`${API_URL}${API_PREFIX}/api/conferences/${id}/commit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -276,7 +307,7 @@ export const apiService = {
     id: string,
     payload: { decisions: Array<{ id: string; type: 'ALIEN' | 'NEW'; decision: 'APPROVE' | 'REJECT'; newLocation?: string; reason?: string }>; decidedBy: string }
   ): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${id}/approve`, {
+    const response = await fetchWithRefresh(`${API_URL}${API_PREFIX}/api/conferences/${id}/approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -286,7 +317,7 @@ export const apiService = {
   },
 
   async rejectConference(id: string, payload: { reason: string; decidedBy: string }): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${id}/reject`, {
+    const response = await fetchWithRefresh(`${API_URL}${API_PREFIX}/api/conferences/${id}/reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
