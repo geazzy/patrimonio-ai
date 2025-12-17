@@ -580,8 +580,8 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
           </div>
         </div>
 
-        {/* Scrollable List */}
-        <div className="flex-1 overflow-y-auto p-4 -mt-8 space-y-3 pb-24 z-0">
+        {/* Scrollable List with Input */}
+        <div className="flex-1 overflow-y-auto p-4 -mt-8 space-y-3 pb-4 z-0 flex flex-col">
           {scannedItems.length === 0 && (
              <div className="text-center text-slate-400 mt-12">
                <QrCode size={48} className="mx-auto mb-2 opacity-50" />
@@ -618,27 +618,28 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
               </div>
             </div>
           ))}
-        </div>
 
-        {/* Floating Input Area (Mobile Friendly) */}
-        <div className="absolute bottom-0 left-0 w-full bg-white p-4 border-t border-slate-200 shadow-lg z-20">
-          <div className="flex gap-2">
-            <input
-              ref={inputRef}
-              type="text" 
-              inputMode="numeric"
-              value={inputId}
-              onChange={(e) => setInputId(e.target.value)}
-              placeholder="Digitar ou Ler Tombo..."
-              className="flex-1 p-4 text-lg border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-              onKeyDown={(e) => e.key === 'Enter' && processScan(inputId)}
-            />
-            <button
-              onClick={() => processScan(inputId)}
-              className="px-6 bg-blue-600 text-white rounded-xl font-bold shadow-md active:scale-95 transition-transform"
-            >
-              OK
-            </button>
+          {/* Input Area - Inside Scrollable (Mobile Optimal) */}
+          <div className="sticky bottom-0 left-0 right-0 bg-white p-4 border-t border-slate-200 shadow-lg z-30 mt-4 rounded-xl">
+            <div className="flex gap-2">
+              <input
+                ref={inputRef}
+                type="text" 
+                inputMode="numeric"
+                value={inputId}
+                onChange={(e) => setInputId(e.target.value)}
+                placeholder="Digitar ou Ler Tombo..."
+                className="flex-1 p-4 text-lg border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                onKeyDown={(e) => e.key === 'Enter' && processScan(inputId)}
+                autoComplete="off"
+              />
+              <button
+                onClick={() => processScan(inputId)}
+                className="px-6 bg-blue-600 text-white rounded-xl font-bold shadow-md active:scale-95 transition-transform"
+              >
+                OK
+              </button>
+            </div>
           </div>
         </div>
 
