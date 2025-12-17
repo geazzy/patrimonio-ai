@@ -235,12 +235,23 @@ export const apiService = {
     return handleResponse<ConferenceRecord>(response);
   },
 
+  async updateConference(conference: ConferenceRecord): Promise<ConferenceRecord> {
+    const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${conference.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(conference)
+    });
+    return handleResponse<ConferenceRecord>(response);
+  },
+
   async commitConference(
     id: string,
     data: {
       newAssets: Asset[];
       updates: Array<{ id: string; newLocation: string }>;
       summary: { matches: number; aliens: number; newItems: number; missing: number };
+      scannedItemsSnapshot?: any[];
     }
   ): Promise<{ success: boolean }> {
     const response = await fetch(`${API_URL}${API_PREFIX}/api/conferences/${id}/commit`, {

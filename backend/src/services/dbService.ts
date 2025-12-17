@@ -365,6 +365,59 @@ class DatabaseService {
     );
   }
 
+  updateConference(conference: ConferenceRecord): void {
+    const stmt = this.db.prepare(`
+      UPDATE conference_records
+      SET 
+        date = ?,
+        location = ?,
+        stats_matches = ?,
+        stats_aliens = ?,
+        stats_new_items = ?,
+        stats_missing = ?,
+        scanned_items_snapshot = ?,
+        created_at = created_at -- keep original created_at
+      WHERE id = ?
+    `);
+
+    stmt.run(
+      conference.date,
+      conference.location,
+      conference.stats.matches,
+      conference.stats.aliens,
+      conference.stats.newItems,
+      conference.stats.missing,
+      JSON.stringify(conference.scannedItemsSnapshot),
+      conference.id
+    );
+  }
+
+  updateConferenceSummaryAndSnapshot(
+    id: string,
+    summary: { matches: number; aliens: number; newItems: number; missing: number },
+    scannedItemsSnapshot: any[]
+  ): void {
+    const stmt = this.db.prepare(`
+      UPDATE conference_records
+      SET 
+        stats_matches = ?,
+        stats_aliens = ?,
+        stats_new_items = ?,
+        stats_missing = ?,
+        scanned_items_snapshot = ?
+      WHERE id = ?
+    `);
+
+    stmt.run(
+      summary.matches,
+      summary.aliens,
+      summary.newItems,
+      summary.missing,
+      JSON.stringify(scannedItemsSnapshot || []),
+      id
+    );
+  }
+
   close(): void {
     this.db.close();
   }

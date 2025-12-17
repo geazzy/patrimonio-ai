@@ -160,6 +160,7 @@ patrimonio-ai/
 - `GET /api/conferences` - Lista todas as conferências
 - `GET /api/conferences/:id` - Busca conferência por ID
 - `POST /api/conferences` - Cria nova conferência
+- `PUT /api/conferences/:id` - Atualiza conferência (snapshot e estatísticas)
 - `POST /api/conferences/:id/commit` - Finaliza conferência e aplica mudanças
 
 ### AI
@@ -237,6 +238,17 @@ Módulo desenhado para uso em tablets/celulares durante a verificação física.
   - Itens novos são inseridos no banco principal.
   - Transferências geram registros no histórico individual do bem.
 
+#### Salvamento incremental e restauração automática
+- A conferência é salva automaticamente a cada leitura de item (snapshot e estatísticas) no registro da conferência (`conference_records`).
+- Caso a página seja recarregada ou a conexão seja perdida, a sessão ativa é restaurada automaticamente ao iniciar o app.
+- Metadados locais usados para retomar o estado: `activeConferenceId`, `activeConferenceStage` e `activeConferenceLocation` (armazenados em `localStorage`).
+- Endpoints utilizados no fluxo incremental:
+  - `POST /api/conferences` (criação do registro ao iniciar a sessão)
+  - `PUT /api/conferences/:id` (atualização contínua do snapshot/estatísticas)
+  - `POST /api/conferences/:id/commit` (aplicar novos itens/transferências e finalizar)
+
+> Observação: O snapshot armazena a lista de itens lidos (com timestamp ISO) e os contadores (encontrados, divergentes, novos, ausentes). Na restauração, os timestamps são reidratados como `Date` no frontend.
+
 ### 4. Inteligência Artificial (Gemini)
 - O backend recebe a query do frontend e busca os assets relevantes do banco.
 - Envia um resumo contextual dos dados (estatísticas e amostra) para o Gemini.
@@ -279,6 +291,7 @@ Módulo desenhado para uso em tablets/celulares durante a verificação física.
 3. **Processamento PDF**: Mantido no frontend para melhor UX (não bloqueia servidor)
 4. **Segurança**: Chave da API Gemini protegida no backend, nunca exposta ao cliente
 5. **Histórico**: Toda mudança de local gera um registro em `movement_history`
+6. **Conferência Resiliente**: A sessão de conferência é persistida incrementalmente e restaurada automaticamente após recargas de página.
 
 ---
 

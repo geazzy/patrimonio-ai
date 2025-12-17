@@ -343,6 +343,43 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
 
                   <SnapshotList title="Itens verificados" items={selectedRecord.scannedItemsSnapshot} />
                 </div>
+
+                <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                  <p className="text-xs text-slate-500">
+                    Você pode continuar esta conferência para adicionar mais itens.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelectedRecord(null)}
+                      className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100"
+                    >
+                      Fechar
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (session) {
+                          const proceed = confirm('Uma conferência já está em andamento. Deseja substituí-la por esta?');
+                          if (!proceed) return;
+                        }
+                        const converted = (selectedRecord.scannedItemsSnapshot || []).map((it) => ({
+                          ...it,
+                          timestamp: new Date(it.timestamp)
+                        }));
+                        onUpdateSession({
+                          targetLocation: selectedRecord.location,
+                          scannedItems: converted,
+                          startTime: new Date(),
+                          stage: 'SCANNING',
+                          conferenceId: selectedRecord.id
+                        });
+                        setSelectedRecord(null);
+                      }}
+                      className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm"
+                    >
+                      Continuar Conferência
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
