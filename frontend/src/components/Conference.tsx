@@ -424,6 +424,13 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                     <StatCard label="Novos" value={selectedRecord.stats.newItems} color="text-blue-600" bg="bg-blue-50" />
                   </div>
 
+                  {selectedRecord.notes && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                      <p className="text-xs uppercase text-slate-500 mb-1">Notas da Conferência</p>
+                      <p className="text-sm text-slate-800 whitespace-pre-wrap">{selectedRecord.notes}</p>
+                    </div>
+                  )}
+
                   <SnapshotList title="Itens verificados" items={selectedRecord.scannedItemsSnapshot} />
                 </div>
 
