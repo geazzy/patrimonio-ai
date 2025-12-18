@@ -402,8 +402,8 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
 
           {selectedRecord && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelectedRecord(null)}>
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden animate-fade-in" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl h-[90vh] flex flex-col animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50 flex-shrink-0">
                   <div>
                     <p className="text-xs uppercase text-slate-500">Conferência</p>
                     <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
@@ -416,7 +416,7 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                   </button>
                 </div>
 
-                <div className="p-5 space-y-5">
+                <div className="p-5 space-y-5 flex-1 overflow-y-auto">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <StatCard label="Encontrados" value={selectedRecord.stats.matches} color="text-green-600" bg="bg-green-50" />
                     <StatCard label="Ausentes" value={selectedRecord.stats.missing} color="text-red-600" bg="bg-red-50" />
@@ -434,14 +434,14 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                   <SnapshotList title="Itens verificados" items={selectedRecord.scannedItemsSnapshot} />
                 </div>
 
-                <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
                   <p className="text-xs text-slate-500">
                     Você pode continuar esta conferência para adicionar mais itens.
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
                     <button
                       onClick={() => setSelectedRecord(null)}
-                      className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100"
+                      className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 w-full md:w-auto"
                     >
                       Fechar
                     </button>
@@ -464,7 +464,7 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                         });
                         setSelectedRecord(null);
                       }}
-                      className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm"
+                      className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm w-full md:w-auto"
                     >
                       Continuar Conferência
                     </button>
