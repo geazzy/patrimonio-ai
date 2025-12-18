@@ -170,8 +170,8 @@ export const AdminApprovalPanel: React.FC<{ currentUser: User | undefined; onApp
 
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelected(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50 flex-shrink-0">
               <div>
                 <p className="text-xs uppercase text-slate-500">Conferência</p>
                 <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
@@ -184,7 +184,7 @@ export const AdminApprovalPanel: React.FC<{ currentUser: User | undefined; onApp
               </button>
             </div>
 
-            <div className="p-5 space-y-6">
+            <div className="p-5 space-y-6 flex-1 overflow-y-auto">
               {/* NOTES */}
               {selected.notes && (
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
@@ -300,8 +300,9 @@ export const AdminApprovalPanel: React.FC<{ currentUser: User | undefined; onApp
                   </div>
                 )}
               </div>
+            </div>
 
-              <div className="flex items-center justify-between">
+            <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0 flex items-center justify-between">
                 <div className="flex gap-2">
                   <button onClick={approveAll} className="px-3 py-2 text-xs bg-green-600 text-white rounded">Aprovar Tudo</button>
                   <button onClick={rejectAll} className="px-3 py-2 text-xs bg-amber-600 text-white rounded">Rejeitar Tudo</button>
