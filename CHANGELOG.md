@@ -7,7 +7,65 @@ Documentação completa de todas as alterações realizadas no sistema de gerenc
 
 ## 🔧 Alterações no Backend
 
-### 1. **Autenticação - Token de Acesso** 
+### 1. **Trust Proxy - Compatibilidade com Traefik/Nginx**
+**Arquivo:** `backend/src/app.ts`
+
+- **Configuração adicionada:** `app.set('trust proxy', 1)`
+- **Motivo:** Permite identificar IPs corretos quando atrás de proxy reverso (Traefik)
+- **Headers respeitados:** `X-Forwarded-For`, `X-Real-IP`
+
+```typescript
+// Trust proxy - IMPORTANT: Required for rate limiting behind nginx/reverse proxy
+app.set('trust proxy', 1);
+```
+
+---
+
+### 2. **Rate Limiting Otimizado**
+**Arquivo:** `backend/src/middleware/rateLimiter.ts`
+
+#### Mudanças nos Limites:
+
+| Rate Limiter | Antes | Depois | Motivo |
+|-------------|--------|---------|---------|
+| API Global | 100 req/15min | 500 req/15min | Suportar uso intensivo |
+| Admin | 20 req/10min | 50 req/10min | Múltiplas aprovações |
+| Conferências | ❌ N/A | 1000 req/hora | **Novo** - Operação legítima |
+
+#### Código - API Limiter com Skip:
+```typescript
+export const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500, // Aumentado de 100 para 500
+  skip: (req) => {
+    // Skip rate limit para conferências (muitas requisições legítimas)
+    const isConferencePath = req.path.includes('/conferences');
+    return isConferencePath;
+  },
+});
+```
+
+#### Código - Novo Conference Limiter:
+```typescript
+export const conferenceLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hora
+  max: 1000, // Muito permissivo para conferências grandes
+  message: {
+    error: 'Limite de requisições de conferência atingido. Aguarde 1 hora.',
+    code: 'RATE_LIMIT_EXCEEDED',
+  },
+});
+```
+
+**Benefícios:**
+- ✅ Conferências com 100+ items funcionam sem bloqueio
+- ✅ Admin pode aprovar múltiplas conferências seguidas
+- ✅ Rate limit ainda protege contra ataques DDoS
+- ✅ Operações legítimas não são penalizadas
+
+---
+
+### 3. **Autenticação - Token de Acesso** 
 **Arquivo:** `backend/src/middleware/auth.ts`
 
 - **Alteração:** Aumento do tempo de expiração do Access Token
@@ -389,6 +447,17 @@ interface MovementHistory {
 ### Bug 5: Campo de entrada coberto pelo teclado em mobile
 **Problema:** Input `fixed` ficava atrás do teclado virtual em mobile
 **Solução:** Input com `sticky` dentro do container scrollável
+
+### Bug 6: Rate Limit bloqueando conferências legítimas
+**Problema:** Conferências com muitos items (50+) excediam limite de 100 req/15min
+**Solução:** 
+- Conferências isentas de rate limit global
+- Rate limiter específico: 1000 req/hora
+- Limite global aumentado: 500 req/15min
+
+### Bug 7: Trust Proxy não configurado (Traefik)
+**Problema:** Express não confiava em headers `X-Forwarded-For` do Traefik/proxy
+**Solução:** Configurado `app.set('trust proxy', 1)` para identificar IPs corretamente
 
 ---
 

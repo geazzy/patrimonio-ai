@@ -31,21 +31,38 @@ export const refreshLimiter = rateLimit({
 // Rate limiter global para API (geral)
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // máximo 100 requisições por IP
+  max: 500, // máximo 500 requisições por IP (aumentado para suportar conferências)
   message: {
     error: 'Muitas requisições. Tente novamente mais tarde.',
     code: 'RATE_LIMIT_EXCEEDED',
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limit para endpoints de conferência (operações legítimas com muitas requisições)
+    const isConferencePath = req.path.includes('/conferences');
+    return isConferencePath;
+  },
 });
 
 // Rate limiter para admin (más restritivo que login)
 export const adminLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutos
-  max: 20, // máximo 20 operações por IP
+  max: 50, // máximo 50 operações por IP (aumentado para aprovações de conferência)
   message: {
     error: 'Muitas operações de admin. Tente novamente em 10 minutos.',
+    code: 'RATE_LIMIT_EXCEEDED',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate limiter para conferências (muito permissivo - operação legítima)
+export const conferenceLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hora
+  max: 1000, // máximo 1000 requisições por hora (suporta conferências grandes)
+  message: {
+    error: 'Limite de requisições de conferência atingido. Aguarde 1 hora.',
     code: 'RATE_LIMIT_EXCEEDED',
   },
   standardHeaders: true,

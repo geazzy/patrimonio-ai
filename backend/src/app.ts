@@ -15,6 +15,10 @@ dotenv.config();
 
 const app: Express = express();
 
+// Trust proxy - IMPORTANT: Required for rate limiting behind nginx/reverse proxy
+// This allows Express to correctly identify client IPs from X-Forwarded-For header
+app.set('trust proxy', 1);
+
 // CORS configuration
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 app.use(cors({
