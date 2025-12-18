@@ -303,21 +303,20 @@ export const AdminApprovalPanel: React.FC<{ currentUser: User | undefined; onApp
             </div>
 
             <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0 flex items-center justify-between">
-                <div className="flex gap-2">
-                  <button onClick={approveAll} className="px-3 py-2 text-xs bg-green-600 text-white rounded">Aprovar Tudo</button>
-                  <button onClick={rejectAll} className="px-3 py-2 text-xs bg-amber-600 text-white rounded">Rejeitar Tudo</button>
-                </div>
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    className="border border-slate-300 rounded p-2 text-xs w-64"
-                    placeholder="Motivo para rejeitar conferência"
-                    value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
-                  />
-                  <button onClick={submitRejection} className="px-3 py-2 text-xs bg-red-600 text-white rounded">Rejeitar</button>
-                  <button onClick={submitDecisions} disabled={submitting} className="px-3 py-2 text-xs bg-blue-600 text-white rounded font-semibold">Salvar</button>
-                </div>
+              <div className="flex gap-2">
+                <button onClick={approveAll} className="px-3 py-2 text-xs bg-green-600 text-white rounded">Aprovar Tudo</button>
+                <button onClick={rejectAll} className="px-3 py-2 text-xs bg-amber-600 text-white rounded">Rejeitar Tudo</button>
+              </div>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  className="border border-slate-300 rounded p-2 text-xs w-64"
+                  placeholder="Motivo para rejeitar conferência"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                />
+                <button onClick={submitRejection} className="px-3 py-2 text-xs bg-red-600 text-white rounded">Rejeitar</button>
+                <button onClick={submitDecisions} disabled={submitting} className="px-3 py-2 text-xs bg-blue-600 text-white rounded font-semibold">Salvar</button>
               </div>
             </div>
           </div>
