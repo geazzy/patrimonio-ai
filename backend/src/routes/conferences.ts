@@ -69,7 +69,7 @@ router.put('/:id', (req: Request, res: Response) => {
 // Submit conference for admin approval (no asset changes here)
 router.post('/:id/commit', (req: Request, res: Response) => {
   try {
-    const { summary, scannedItemsSnapshot, submittedBy } = req.body;
+    const { summary, scannedItemsSnapshot, submittedBy, notes } = req.body;
     const id = req.params.id;
     const conference = db.getConferenceById(id);
     if (!conference) {
@@ -78,6 +78,7 @@ router.post('/:id/commit', (req: Request, res: Response) => {
 
     db.updateConference({
       ...conference,
+      notes: typeof notes === 'string' ? notes : conference.notes,
       stats: summary || conference.stats,
       scannedItemsSnapshot: scannedItemsSnapshot || conference.scannedItemsSnapshot,
       status: 'PENDING_APPROVAL',

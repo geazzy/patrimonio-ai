@@ -52,6 +52,7 @@ export interface ConferenceRecord {
   id: string;
   date: string;
   location: string;
+  notes?: string;
   stats: {
     matches: number;
     aliens: number;

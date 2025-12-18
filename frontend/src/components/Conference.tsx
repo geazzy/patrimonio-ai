@@ -11,7 +11,8 @@ interface ConferenceProps {
   onCommitChanges: (
     newAssets: Asset[], 
     updates: { id: string, newLocation: string }[],
-    summary: { matches: number; aliens: number; newItems: number; missing: number }
+    summary: { matches: number; aliens: number; newItems: number; missing: number },
+    notes?: string
   ) => void;
   onReloadAssets?: () => Promise<void>;
 }
@@ -35,6 +36,9 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
 
   // Transfer Selection State (IDs of Aliens selected to move)
   const [selectedTransfers, setSelectedTransfers] = useState<Set<string>>(new Set());
+
+  // Conference notes (for REPORT stage)
+  const [notes, setNotes] = useState<string>('');
 
   // Derive State from Session
   const scannedItems = session?.scannedItems || [];
@@ -120,6 +124,7 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
       onUpdateSession(null);
       setSetupLocation('');
       setSelectedTransfers(new Set());
+      setNotes('');
       setLocalView('LIST');
     }
   };
@@ -208,7 +213,7 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
     setSelectedTransfers(newSet);
   };
 
-  const handleSaveChanges = () => {
+  const buildCommitPayload = () => {
     // 1. Create New Assets (Always create new if scanned)
     const assetsToCreate: Asset[] = report.newItems.map(item => ({
       id: item.id,
@@ -240,9 +245,19 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
       missing: report.missing.length
     };
 
+    return { assetsToCreate, updates, summary };
+  };
+
+  const handleSaveChanges = () => {
+    const { assetsToCreate, updates, summary } = buildCommitPayload();
     onCommitChanges(assetsToCreate, updates, summary);
-    
-    // Cleanup local state
+    setSelectedTransfers(new Set());
+    setLocalView('LIST');
+  };
+
+  const handleSaveChangesWithNotes = (notes?: string) => {
+    const { assetsToCreate, updates, summary } = buildCommitPayload();
+    onCommitChanges(assetsToCreate, updates, summary, notes);
     setSelectedTransfers(new Set());
     setLocalView('LIST');
   };
@@ -821,6 +836,19 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                  </ul>
               </div>
             )}
+
+            {/* Notes Section */}
+            <div>
+              <h3 className="text-slate-800 font-bold mb-2 flex items-center gap-2">
+                <ClipboardList size={18} /> Notas da Conferência (opcional)
+              </h3>
+              <textarea
+                className="w-full min-h-[100px] border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Adicione observações gerais sobre esta conferência (ex.: dificuldades, locais inacessíveis, observações específicas)."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
          </div>
 
          <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center">
@@ -833,7 +861,7 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
 
              <div className="flex gap-3">
                <button
-                 onClick={handleSaveChanges}
+                 onClick={() => handleSaveChangesWithNotes(notes)}
                  className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 flex items-center gap-2"
                >
                  <Save size={18} />

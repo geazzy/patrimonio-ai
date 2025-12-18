@@ -126,6 +126,29 @@ toLocation: asset.location  // (era: d.newLocation || targetLocation)
 
 ---
 
+### 4. **Notas da Conferência (persistência e API)**
+**Arquivos:** `backend/src/models/types.ts`, `backend/src/services/dbService.ts`, `backend/src/routes/conferences.ts`
+
+- Tipo `ConferenceRecord` recebeu `notes?: string`.
+- Banco: adicionada coluna `notes TEXT` em `conference_records` (migração defensiva em runtime).
+- Endpoint `POST /api/conferences/:id/commit` agora aceita `notes` no corpo e persiste no registro.
+
+Exemplo de payload no commit:
+```json
+{
+  "summary": {"matches": 10, "aliens": 2, "newItems": 1, "missing": 3},
+  "submittedBy": "user@dominio",
+  "notes": "Porta trancada na sala E-102; leitura parcial."
+}
+```
+
+Benefícios:
+- ✅ Contexto adicional para aprovação e auditoria
+- ✅ Persistência junto ao registro da conferência
+- ✅ Compatível com versões antigas via migração automática
+
+---
+
 ## 🎨 Alterações no Frontend
 
 ### 1. **Auto-Renovação de Token**
@@ -351,6 +374,23 @@ const handleUpdateAssets = async (updatedAssets: Asset[]) => {
 - ✅ Melhor UX em dispositivos móveis
 - ✅ Input sempre acessível junto com teclado
 
+### 6. **Notas na Conferência (Relatório e Aprovação)**
+**Arquivos:** `frontend/src/components/Conference.tsx`, `frontend/src/App.tsx`, `frontend/src/services/apiService.ts`, `frontend/src/components/AdminApprovalPanel.tsx`, `frontend/src/types.ts`
+
+- Relatório: adicionado campo “Notas da Conferência (opcional)” para observações gerais
+- Envio: notas incluídas no envio para aprovação e salvas no registro
+- Aprovação: notas aparecem no topo do modal de revisão para o admin
+
+Trecho UI (Conference → REPORT):
+```tsx
+<textarea
+  className="w-full min-h-[100px] border border-slate-300 rounded-lg p-3 text-sm ..."
+  placeholder="Adicione observações gerais sobre esta conferência..."
+  value={notes}
+  onChange={(e) => setNotes(e.target.value)}
+/>
+```
+
 ---
 
 ## 🗄️ Banco de Dados
@@ -377,6 +417,34 @@ interface MovementHistory {
   rejectionReason?: string;     // Novo
 }
 ```
+
+### Tabela: `conference_records`
+```sql
+CREATE TABLE IF NOT EXISTS conference_records (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL,
+  location TEXT NOT NULL,
+  notes TEXT,                    -- Novo campo
+  stats_matches INTEGER DEFAULT 0,
+  stats_aliens INTEGER DEFAULT 0,
+  stats_new_items INTEGER DEFAULT 0,
+  stats_missing INTEGER DEFAULT 0,
+  scanned_items_snapshot TEXT,
+  decisions_snapshot TEXT,
+  status TEXT DEFAULT 'DRAFT',
+  created_by TEXT NOT NULL,
+  approved_by TEXT,
+  approved_at DATETIME,
+  rejected_by TEXT,
+  rejection_reason TEXT,
+  rejected_at DATETIME,
+  last_modified_by TEXT NOT NULL,
+  last_modified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+- Migração automática aplicada em runtime se a coluna `notes` não existir: `ALTER TABLE conference_records ADD COLUMN notes TEXT`
 
 ---
 
@@ -489,6 +557,11 @@ interface MovementHistory {
 - Scroll automático quando teclado abre
 - Sem conflito de z-index ou overlay
 
+### ✅ Notas da Conferência
+- Campo de notas no relatório da conferência
+- Envio e persistência junto ao registro
+- Exibição no painel de aprovação do admin
+
 ---
 
 ## 🧪 Como Testar
@@ -524,6 +597,15 @@ interface MovementHistory {
 4. Input sempre deve estar visível e acessível
 ```
 
+### Teste 5: Notas da Conferência
+```
+1. Realizar leitura e ir ao Relatório
+2. Preencher “Notas da Conferência (opcional)”
+3. Enviar para aprovação
+4. Abrir painel de aprovação (admin) e verificar notas exibidas
+5. Confirmar que as notas persistem no registro da conferência
+```
+
 ---
 
 ## 📁 Arquivos Modificados
@@ -552,5 +634,5 @@ interface MovementHistory {
 
 ---
 
-**Última atualização:** 17 de dezembro de 2025
+**Última atualização:** 18 de dezembro de 2025
 **Versão:** 1.0.0

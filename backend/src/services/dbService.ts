@@ -75,6 +75,7 @@ class DatabaseService {
         id TEXT PRIMARY KEY,
         date TEXT NOT NULL,
         location TEXT NOT NULL,
+        notes TEXT,
         stats_matches INTEGER DEFAULT 0,
         stats_aliens INTEGER DEFAULT 0,
         stats_new_items INTEGER DEFAULT 0,
@@ -102,6 +103,7 @@ class DatabaseService {
     {
       const cols = pragmaInfo('conference_records');
       const addColumn = (sql: string) => { try { this.db.exec(sql); } catch { /* noop */ } };
+      if (!hasColumn(cols, 'notes')) addColumn("ALTER TABLE conference_records ADD COLUMN notes TEXT");
       if (!hasColumn(cols, 'decisions_snapshot')) addColumn("ALTER TABLE conference_records ADD COLUMN decisions_snapshot TEXT");
       if (!hasColumn(cols, 'status')) addColumn("ALTER TABLE conference_records ADD COLUMN status TEXT DEFAULT 'DRAFT'");
       if (!hasColumn(cols, 'created_by')) addColumn("ALTER TABLE conference_records ADD COLUMN created_by TEXT");
@@ -394,6 +396,7 @@ class DatabaseService {
       id: record.id,
       date: record.date,
       location: record.location,
+      notes: record.notes || undefined,
       stats: {
         matches: record.stats_matches,
         aliens: record.stats_aliens,
@@ -428,6 +431,7 @@ class DatabaseService {
       id: record.id,
       date: record.date,
       location: record.location,
+      notes: record.notes || undefined,
       stats: {
         matches: record.stats_matches,
         aliens: record.stats_aliens,
@@ -454,14 +458,15 @@ class DatabaseService {
 
   createConference(conference: ConferenceRecord): void {
     const stmt = this.db.prepare(`
-      INSERT INTO conference_records (id, date, location, stats_matches, stats_aliens, stats_new_items, stats_missing, scanned_items_snapshot, decisions_snapshot, status, created_by, last_modified_by, last_modified_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO conference_records (id, date, location, notes, stats_matches, stats_aliens, stats_new_items, stats_missing, scanned_items_snapshot, decisions_snapshot, status, created_by, last_modified_by, last_modified_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
       conference.id,
       conference.date,
       conference.location,
+      conference.notes || null,
       conference.stats.matches,
       conference.stats.aliens,
       conference.stats.newItems,
@@ -481,6 +486,7 @@ class DatabaseService {
       SET 
         date = ?,
         location = ?,
+        notes = ?,
         stats_matches = ?,
         stats_aliens = ?,
         stats_new_items = ?,
@@ -502,6 +508,7 @@ class DatabaseService {
     stmt.run(
       conference.date,
       conference.location,
+      conference.notes || null,
       conference.stats.matches,
       conference.stats.aliens,
       conference.stats.newItems,

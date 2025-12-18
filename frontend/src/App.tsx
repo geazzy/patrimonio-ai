@@ -202,7 +202,8 @@ const App: React.FC = () => {
   const handleConferenceCommit = async (
     newAssets: Asset[], 
     updates: { id: string, newLocation: string }[],
-    summary: { matches: number; aliens: number; newItems: number; missing: number }
+    summary: { matches: number; aliens: number; newItems: number; missing: number },
+    notes?: string
   ) => {
     try {
       setIsLoading(true);
@@ -217,6 +218,7 @@ const App: React.FC = () => {
           id: conferenceId,
           date: new Date().toISOString(),
           location: conferenceSession.targetLocation,
+          notes: notes,
           stats: summary,
           scannedItemsSnapshot: conferenceSession.scannedItems,
           status: 'DRAFT',
@@ -230,6 +232,7 @@ const App: React.FC = () => {
           id: crypto.randomUUID(),
           date: new Date().toISOString(),
           location: conferenceSession.targetLocation,
+          notes: notes,
           stats: summary,
           scannedItemsSnapshot: conferenceSession.scannedItems,
           status: 'DRAFT',
@@ -245,7 +248,8 @@ const App: React.FC = () => {
       await apiService.submitConference(conferenceId, {
         summary,
         scannedItemsSnapshot: conferenceSession.scannedItems,
-        submittedBy: currentUser ? currentUser.email : 'unknown'
+        submittedBy: currentUser ? currentUser.email : 'unknown',
+        notes
       });
 
       // 3. Reload conference list (assets remain unchanged until approval)

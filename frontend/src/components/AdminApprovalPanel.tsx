@@ -185,6 +185,14 @@ export const AdminApprovalPanel: React.FC<{ currentUser: User | undefined; onApp
             </div>
 
             <div className="p-5 space-y-6">
+              {/* NOTES */}
+              {selected.notes && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <p className="text-xs uppercase text-slate-500 mb-1">Notas da Conferência</p>
+                  <p className="text-sm text-slate-800 whitespace-pre-wrap">{selected.notes}</p>
+                </div>
+              )}
+
               {/* ALIENS */}
               <div>
                 <h4 className="text-amber-700 font-bold mb-3 flex items-center gap-2"><AlertTriangle size={18} /> Itens Divergentes</h4>

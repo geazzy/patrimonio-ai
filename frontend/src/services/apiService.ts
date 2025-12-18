@@ -37,6 +37,7 @@ export interface ConferenceRecord {
   id: string;
   date: string;
   location: string;
+  notes?: string;
   stats: {
     matches: number;
     aliens: number;
@@ -292,6 +293,7 @@ export const apiService = {
       summary: { matches: number; aliens: number; newItems: number; missing: number };
       scannedItemsSnapshot?: any[];
       submittedBy: string;
+      notes?: string;
     }
   ): Promise<{ success: boolean }> {
     const response = await fetchWithRefresh(`${API_URL}${API_PREFIX}/api/conferences/${id}/commit`, {
