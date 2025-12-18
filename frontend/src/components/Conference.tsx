@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Asset, ScannedItem, ScanStatus, ConferenceSession, ConferenceRecord } from '../types';
-import { QrCode, CheckCircle, AlertTriangle, HelpCircle, ArrowRight, MapPin, X, Save, RotateCcw, ChevronLeft, Trash2, Calendar, ClipboardList, Plus, Eye } from 'lucide-react';
+import { Asset, ScannedItem, ScanStatus, ConferenceSession, ConferenceRecord, User } from '../types';
+import { QrCode, CheckCircle, AlertTriangle, HelpCircle, ArrowRight, MapPin, X, Save, RotateCcw, ChevronLeft, Trash2, Calendar, ClipboardList, Plus, Eye, PlayCircle, Send, Trash } from 'lucide-react';
 import apiService from '../services/apiService';
 
 interface ConferenceProps {
@@ -15,11 +15,13 @@ interface ConferenceProps {
     notes?: string
   ) => void;
   onReloadAssets?: () => Promise<void>;
+  onReloadConferences?: () => Promise<void>;
+  currentUser?: User;
 }
 
-export const Conference: React.FC<ConferenceProps> = ({ assets, session, history, onUpdateSession, onCommitChanges, onReloadAssets }) => {
+export const Conference: React.FC<ConferenceProps> = ({ assets, session, history, onUpdateSession, onCommitChanges, onReloadAssets, onReloadConferences, currentUser }) => {
   // View State: 'LIST' (History) or 'SETUP' (New Conf). If session exists, this is ignored.
-  const [localView, setLocalView] = useState<'LIST' | 'SETUP'>('LIST');
+  const [localView, setLocalView] = useState<'LIST' | 'SETUP' | 'VIEW'>('LIST');
   const [selectedRecord, setSelectedRecord] = useState<ConferenceRecord | null>(null);
 
   // Local state for Setup input
@@ -39,6 +41,37 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
 
   // Conference notes (for REPORT stage)
   const [notes, setNotes] = useState<string>('');
+
+  // Derived data for selected record (history preview)
+  const selectedSnapshot = useMemo(() => {
+    if (!selectedRecord) return [];
+    return (selectedRecord.scannedItemsSnapshot || []).map((it) => ({
+      ...it,
+      timestamp: new Date(it.timestamp)
+    }));
+  }, [selectedRecord]);
+
+  const selectedReportData = useMemo(() => {
+    if (!selectedRecord) {
+      return {
+        matches: [],
+        aliens: [],
+        newItems: [],
+        missing: [] as Asset[]
+      };
+    }
+    const matches = selectedSnapshot.filter(i => i.status === 'MATCH');
+    const aliens = selectedSnapshot.filter(i => i.status === 'ALIEN');
+    const newItems = selectedSnapshot.filter(i => i.status === 'NEW');
+    const scannedIds = new Set(selectedSnapshot.map(i => i.id));
+    const missing = assets.filter(a => a.location === selectedRecord.location && !scannedIds.has(a.id));
+    return { matches, aliens, newItems, missing };
+  }, [selectedRecord, selectedSnapshot, assets]);
+
+  const selectedMissingCount = useMemo(() => {
+    if (!selectedRecord) return 0;
+    return selectedReportData.missing.length || selectedRecord.stats.missing;
+  }, [selectedRecord, selectedReportData]);
 
   // Derive State from Session
   const scannedItems = session?.scannedItems || [];
@@ -321,7 +354,7 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
   if (!session) {
     if (localView === 'LIST') {
       return (
-        <div className="p-6 md:p-8 animate-fade-in max-w-5xl mx-auto">
+        <div className="p-4 md:p-8 animate-fade-in w-full">
           <div className="flex justify-between items-center mb-8">
             <div>
               <h2 className="text-2xl font-bold text-slate-800">Conferências Realizadas</h2>
@@ -348,131 +381,258 @@ export const Conference: React.FC<ConferenceProps> = ({ assets, session, history
                 </button>
               </div>
             ) : (
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold uppercase">
-                  <tr>
-                    <th className="p-4">Data</th>
-                    <th className="p-4">Local</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-center">Encontrados</th>
-                    <th className="p-4 text-center">Ausentes</th>
-                    <th className="p-4 text-center">Divergentes</th>
-                    <th className="p-4 text-center">Novos</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {history.map((record) => (
-                    <tr 
-                      key={record.id} 
-                      className="hover:bg-slate-50 transition-colors cursor-pointer"
-                      onClick={() => setSelectedRecord(record)}
-                    >
-                      <td className="p-4 text-slate-600 flex items-center gap-2">
-                        <Calendar size={14} className="text-slate-400" />
-                        {new Date(record.date).toLocaleDateString()}
-                        <span className="text-xs text-slate-400 ml-1">
-                          {new Date(record.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </span>
-                      </td>
-                      <td className="p-4 font-medium text-slate-800">{record.location}</td>
-                      <td className="p-4">
-                        {record.status === 'DRAFT' && (
-                          <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 border border-slate-200">Rascunho</span>
-                        )}
-                        {record.status === 'PENDING_APPROVAL' && (
-                          <span className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700 border border-amber-200">Pendente</span>
-                        )}
-                        {record.status === 'APPROVED' && (
-                          <span className="text-xs px-2 py-1 rounded bg-green-50 text-green-700 border border-green-200">Aprovado</span>
-                        )}
-                        {record.status === 'REJECTED' && (
-                          <span title={record.rejectionReason || ''} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200">Rejeitado</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-center text-green-600 font-bold bg-green-50/50">{record.stats.matches}</td>
-                      <td className="p-4 text-center text-red-600 font-bold bg-red-50/50">{record.stats.missing}</td>
-                      <td className="p-4 text-center text-amber-600 font-bold bg-amber-50/50">{record.stats.aliens}</td>
-                      <td className="p-4 text-center text-blue-600 font-bold bg-blue-50/50">{record.stats.newItems}</td>
+              <div className="overflow-x-auto md:overflow-visible">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold uppercase">
+                    <tr>
+                      <th className="p-4 whitespace-nowrap">Data</th>
+                      <th className="p-4 whitespace-nowrap">Local</th>
+                      <th className="p-4 whitespace-nowrap">Status</th>
+                      <th className="p-4 text-center whitespace-nowrap">Encontrados</th>
+                      <th className="p-4 text-center whitespace-nowrap">Ausentes</th>
+                      <th className="p-4 text-center whitespace-nowrap">Divergentes</th>
+                      <th className="p-4 text-center whitespace-nowrap">Novos</th>
+                      <th className="p-4 text-right whitespace-nowrap">Ações</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {history.map((record) => (
+                      <tr 
+                        key={record.id} 
+                        className="hover:bg-slate-50 transition-colors"
+                      >
+                        <td className="p-4 text-slate-600 flex items-center gap-2 whitespace-nowrap">
+                          <Calendar size={14} className="text-slate-400" />
+                          {new Date(record.date).toLocaleDateString()}
+                          <span className="text-xs text-slate-400 ml-1">
+                            {new Date(record.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </span>
+                        </td>
+                        <td className="p-4 font-medium text-slate-800 whitespace-nowrap">{record.location}</td>
+                        <td className="p-4 whitespace-nowrap">
+                          {record.status === 'DRAFT' && (
+                            <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 border border-slate-200">Rascunho</span>
+                          )}
+                          {record.status === 'PENDING_APPROVAL' && (
+                            <span className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700 border border-amber-200">Pendente</span>
+                          )}
+                          {record.status === 'APPROVED' && (
+                            <span className="text-xs px-2 py-1 rounded bg-green-50 text-green-700 border border-green-200">Aprovado</span>
+                          )}
+                          {record.status === 'REJECTED' && (
+                            <span title={record.rejectionReason || ''} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200">Rejeitado</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-center text-green-600 font-bold bg-green-50/50 whitespace-nowrap">{record.stats.matches}</td>
+                        <td className="p-4 text-center text-red-600 font-bold bg-red-50/50 whitespace-nowrap">{record.stats.missing}</td>
+                        <td className="p-4 text-center text-amber-600 font-bold bg-amber-50/50 whitespace-nowrap">{record.stats.aliens}</td>
+                        <td className="p-4 text-center text-blue-600 font-bold bg-blue-50/50 whitespace-nowrap">{record.stats.newItems}</td>
+                        <td className="p-4 text-right whitespace-nowrap">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              title="Visualizar relatório"
+                              className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100"
+                              onClick={() => { setSelectedRecord(record); setLocalView('VIEW'); }}
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              title="Continuar conferência"
+                              className="p-2 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50"
+                              onClick={() => {
+                                if (session) {
+                                  const proceed = confirm('Uma conferência já está em andamento. Deseja substituí-la por esta?');
+                                  if (!proceed) return;
+                                }
+                                const converted = (record.scannedItemsSnapshot || []).map((it: any) => ({
+                                  ...it,
+                                  timestamp: new Date(it.timestamp)
+                                }));
+                                onUpdateSession({
+                                  targetLocation: record.location,
+                                  scannedItems: converted,
+                                  startTime: new Date(record.date),
+                                  stage: 'SCANNING',
+                                  conferenceId: record.id
+                                });
+                              }}
+                            >
+                              <PlayCircle size={16} />
+                            </button>
+                            <button
+                              title="Enviar para aprovação"
+                              className="p-2 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-40"
+                              disabled={record.status === 'PENDING_APPROVAL' || record.status === 'APPROVED'}
+                              onClick={async () => {
+                                try {
+                                  const submitter = currentUser?.email || currentUser?.name || 'unknown';
+                                  await apiService.submitConference(record.id, {
+                                    summary: record.stats,
+                                    scannedItemsSnapshot: record.scannedItemsSnapshot,
+                                    submittedBy: submitter,
+                                    notes: record.notes
+                                  });
+                                  if (onReloadConferences) await onReloadConferences();
+                                  alert('Conferência enviada para aprovação.');
+                                } catch (err: any) {
+                                  alert(err.message || 'Erro ao enviar conferência.');
+                                }
+                              }}
+                            >
+                              <Send size={16} />
+                            </button>
+                            {currentUser?.isAdmin && (
+                              <button
+                                title="Excluir conferência"
+                                className="p-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                                onClick={async () => {
+                                  if (!confirm('Excluir conferência? Esta ação é irreversível.')) return;
+                                  try {
+                                    await apiService.deleteConference(record.id);
+                                    if (onReloadConferences) await onReloadConferences();
+                                    alert('Conferência excluída.');
+                                  } catch (err: any) {
+                                    alert(err.message || 'Erro ao excluir conferência.');
+                                  }
+                                }}
+                              >
+                                <Trash size={16} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 
-          {selectedRecord && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelectedRecord(null)}>
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl h-[90vh] flex flex-col animate-fade-in" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50 flex-shrink-0">
-                  <div>
-                    <p className="text-xs uppercase text-slate-500">Conferência</p>
-                    <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                      <Eye size={16} className="text-blue-600" /> {selectedRecord.location}
-                    </h3>
-                    <p className="text-xs text-slate-500">{new Date(selectedRecord.date).toLocaleString()}</p>
-                  </div>
-                  <button onClick={() => setSelectedRecord(null)} className="text-slate-400 hover:text-slate-600">
-                    <X size={20} />
-                  </button>
-                </div>
+          {/* Visualização de relatório movida para a view dedicada */}
+        </div>
+      );
+    }
 
-                <div className="p-5 space-y-5 flex-1 overflow-y-auto">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <StatCard label="Encontrados" value={selectedRecord.stats.matches} color="text-green-600" bg="bg-green-50" />
-                    <StatCard label="Ausentes" value={selectedRecord.stats.missing} color="text-red-600" bg="bg-red-50" />
-                    <StatCard label="Divergentes" value={selectedRecord.stats.aliens} color="text-amber-600" bg="bg-amber-50" />
-                    <StatCard label="Novos" value={selectedRecord.stats.newItems} color="text-blue-600" bg="bg-blue-50" />
-                  </div>
+    // VIEW REPORT (standalone page)
+    if (localView === 'VIEW' && selectedRecord) {
+      return (
+        <div className="p-4 md:p-8 max-w-5xl mx-auto animate-fade-in">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <p className="text-xs uppercase text-slate-500">Conferência</p>
+              <h3 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                <Eye size={18} className="text-blue-600" /> {selectedRecord.location}
+              </h3>
+              <p className="text-xs text-slate-500">{new Date(selectedRecord.date).toLocaleString()}</p>
+            </div>
+            <button onClick={() => { setSelectedRecord(null); setLocalView('LIST'); }} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1">
+              <ChevronLeft size={16} /> Voltar
+            </button>
+          </div>
 
-                  {selectedRecord.notes && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                      <p className="text-xs uppercase text-slate-500 mb-1">Notas da Conferência</p>
-                      <p className="text-sm text-slate-800 whitespace-pre-wrap">{selectedRecord.notes}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            <StatCard label="Encontrados" value={selectedReportData.matches.length || selectedRecord.stats.matches} color="text-green-600" bg="bg-green-50" />
+            <StatCard label="Ausentes" value={selectedMissingCount} color="text-red-600" bg="bg-red-50" />
+            <StatCard label="Divergentes" value={selectedReportData.aliens.length || selectedRecord.stats.aliens} color="text-amber-600" bg="bg-amber-50" />
+            <StatCard label="Novos" value={selectedReportData.newItems.length || selectedRecord.stats.newItems} color="text-blue-600" bg="bg-blue-50" />
+          </div>
+
+          {selectedRecord.notes && (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4">
+              <p className="text-xs uppercase text-slate-500 mb-1">Notas da Conferência</p>
+              <p className="text-sm text-slate-800 whitespace-pre-wrap">{selectedRecord.notes}</p>
+            </div>
+          )}
+
+          {selectedReportData.missing.length > 0 && (
+            <div className="border border-red-100 rounded-lg overflow-hidden mb-6">
+              <div className="px-4 py-3 bg-red-50 text-red-700 font-semibold flex items-center gap-2 text-sm">
+                <X size={16} /> Itens não encontrados ({selectedReportData.missing.length})
+              </div>
+              <div className="divide-y divide-red-50 max-h-72 overflow-y-auto bg-white">
+                {selectedReportData.missing.map(item => (
+                  <div key={item.id} className="px-4 py-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-xs text-slate-500">#{item.id}</p>
+                      <p className="text-sm font-semibold text-slate-800">{item.description}</p>
                     </div>
-                  )}
-
-                  <SnapshotList title="Itens verificados" items={selectedRecord.scannedItemsSnapshot} />
-                </div>
-
-                <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-                  <p className="text-xs text-slate-500">
-                    Você pode continuar esta conferência para adicionar mais itens.
-                  </p>
-                  <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
-                    <button
-                      onClick={() => setSelectedRecord(null)}
-                      className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 w-full md:w-auto"
-                    >
-                      Fechar
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (session) {
-                          const proceed = confirm('Uma conferência já está em andamento. Deseja substituí-la por esta?');
-                          if (!proceed) return;
-                        }
-                        const converted = (selectedRecord.scannedItemsSnapshot || []).map((it) => ({
-                          ...it,
-                          timestamp: new Date(it.timestamp)
-                        }));
-                        onUpdateSession({
-                          targetLocation: selectedRecord.location,
-                          scannedItems: converted,
-                          startTime: new Date(),
-                          stage: 'SCANNING',
-                          conferenceId: selectedRecord.id
-                        });
-                        setSelectedRecord(null);
-                      }}
-                      className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm w-full md:w-auto"
-                    >
-                      Continuar Conferência
-                    </button>
+                    <span className="text-xs text-red-600 font-semibold">Ausente</span>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
           )}
+
+          <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <ClipboardList size={16} className="text-blue-600" /> Itens verificados
+            </div>
+            <div className="divide-y divide-slate-100 max-h-[50vh] overflow-y-auto">
+              {selectedSnapshot.length === 0 ? (
+                <div className="p-4 text-slate-400 text-sm">Nenhum item registrado.</div>
+              ) : (
+                selectedSnapshot
+                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                  .map((item, idx) => {
+                    const statusChip = {
+                      MATCH: { label: 'OK', cls: 'bg-green-50 text-green-700 border-green-100' },
+                      ALIEN: { label: 'Divergente', cls: 'bg-amber-50 text-amber-700 border-amber-100' },
+                      NEW: { label: 'Novo', cls: 'bg-blue-50 text-blue-700 border-blue-100' }
+                    }[item.status];
+
+                    return (
+                      <div key={idx} className="px-4 py-3 flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-mono text-xs text-slate-500">#{item.id}</p>
+                          <p className="text-sm font-semibold text-slate-800">{item.description}</p>
+                          {item.expectedLocation && (
+                            <p className="text-xs text-amber-600 mt-1">Esperado em {item.expectedLocation}</p>
+                          )}
+                        </div>
+                        <div className="text-right text-xs text-slate-500 flex flex-col items-end gap-1">
+                          <span className={`px-2 py-0.5 rounded-full border text-[11px] ${statusChip.cls}`}>{statusChip.label}</span>
+                          <span>{new Date(item.timestamp).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">Você pode continuar esta conferência para adicionar mais itens.</p>
+            <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+              <button
+                onClick={() => { setSelectedRecord(null); setLocalView('LIST'); }}
+                className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 w-full md:w-auto"
+              >
+                Voltar ao Histórico
+              </button>
+              <button
+                onClick={() => {
+                  if (!selectedRecord) return;
+                  if (session) {
+                    const proceed = confirm('Uma conferência já está em andamento. Deseja substituí-la por esta?');
+                    if (!proceed) return;
+                  }
+                  onUpdateSession({
+                    targetLocation: selectedRecord.location,
+                    scannedItems: selectedSnapshot,
+                    startTime: new Date(selectedRecord.date),
+                    stage: 'SCANNING',
+                    conferenceId: selectedRecord.id
+                  });
+                  setSelectedRecord(null);
+                  setLocalView('LIST');
+                }}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm w-full md:w-auto"
+              >
+                Continuar Conferência
+              </button>
+            </div>
+          </div>
         </div>
       );
     }

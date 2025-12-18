@@ -259,5 +259,21 @@ router.post('/:id/reject', (req: Request, res: Response) => {
   }
 });
 
+// DELETE /api/conferences/:id - Delete conference (admin only via middleware upstream)
+router.delete('/:id', (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const existing = db.getConferenceById(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Conference not found' });
+    }
+    db.deleteConference(id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting conference:', error);
+    res.status(500).json({ error: 'Failed to delete conference' });
+  }
+});
+
 export default router;
 

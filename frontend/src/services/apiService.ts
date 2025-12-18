@@ -328,6 +328,14 @@ export const apiService = {
     return handleResponse<{ success: boolean }>(response);
   },
 
+  async deleteConference(id: string): Promise<{ success: boolean }> {
+    const response = await fetchWithRefresh(`${API_URL}${API_PREFIX}/api/conferences/${id}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    return handleResponse<{ success: boolean }>(response);
+  },
+
   // Locations
   async createLocation(name: string): Promise<{ success: boolean; location: string; assetId: string }> {
     const response = await fetch(`${API_URL}${API_PREFIX}/api/locations`, {

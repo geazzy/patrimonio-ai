@@ -557,6 +557,11 @@ class DatabaseService {
     this.db.close();
   }
 
+  deleteConference(id: string): void {
+    const stmt = this.db.prepare('DELETE FROM conference_records WHERE id = ?');
+    stmt.run(id);
+  }
+
   // User operations
   getUserByEmail(email: string): User | null {
     const stmt = this.db.prepare('SELECT * FROM users WHERE email = ?');

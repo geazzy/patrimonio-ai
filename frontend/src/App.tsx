@@ -85,16 +85,18 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
-  // Reload assets from backend
+  // Reload conferences
+  const reloadConferences = async () => {
+    const loadedConferences = await apiService.getConferences();
+    setConferenceHistory(loadedConferences);
+  };
+
+  // Reload assets from backend (also refresh conferences)
   const reloadAssets = async () => {
     try {
       const loadedAssets = await apiService.getAssets();
       setAssets(loadedAssets);
-      
-      // Also reload conferences
-      const loadedConferences = await apiService.getConferences();
-      setConferenceHistory(loadedConferences);
-      
+      await reloadConferences();
       console.log(`Assets reloaded: ${loadedAssets.length} items`);
     } catch (error) {
       console.error("Error reloading assets:", error);
@@ -651,6 +653,8 @@ const App: React.FC = () => {
             onUpdateSession={handleUpdateConferenceSession}
             onCommitChanges={handleConferenceCommit}
             onReloadAssets={reloadAssets}
+            onReloadConferences={reloadConferences}
+            currentUser={currentUser || undefined}
           />
         )}
         {viewMode === ViewMode.ASSET_DETAIL && selectedAsset && (
