@@ -7,6 +7,16 @@ export interface MovementHistory {
   rejectionReason?: string;
 }
 
+export interface ConferenceAppearance {
+  conferenceId: string;
+  conferenceDate: string;
+  conferenceLocation: string;
+  conferenceStatus: ConferenceStatus;
+  itemStatus: ScanStatus;
+  expectedLocation?: string;
+  scannedAt?: string;
+}
+
 export interface Asset {
   id: string; // Tombo
   description: string;
@@ -19,6 +29,7 @@ export interface Asset {
   category: string;
   tags: string[];
   history: MovementHistory[];
+  conferenceHistory?: ConferenceAppearance[];
 }
 
 export interface ImportConflict {

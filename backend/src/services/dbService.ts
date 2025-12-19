@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync } from 'fs';
-import { Asset, MovementHistory, ConferenceRecord, User, RefreshToken } from '../models/types.js';
+import { Asset, MovementHistory, ConferenceRecord, User, RefreshToken, ConferenceAppearance } from '../models/types.js';
 import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -95,6 +95,21 @@ class DatabaseService {
       )
     `);
 
+    // Create conference_items table (normalized snapshot per item)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS conference_items (
+        id TEXT PRIMARY KEY,
+        conference_id TEXT NOT NULL,
+        asset_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        expected_location TEXT,
+        scanned_at TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (conference_id) REFERENCES conference_records(id) ON DELETE CASCADE,
+        FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+      )
+    `);
+
     // Ensure columns exist in older databases (simple migration)
     const pragmaInfo = (table: string) => this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
     const hasColumn = (cols: Array<{ name: string }>, name: string) => cols.some(c => c.name === name);
@@ -132,7 +147,12 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_assets_location ON assets(location);
       CREATE INDEX IF NOT EXISTS idx_assets_category ON assets(category);
       CREATE INDEX IF NOT EXISTS idx_movement_asset_id ON movement_history(asset_id);
+      CREATE INDEX IF NOT EXISTS idx_conf_items_conf_id ON conference_items(conference_id);
+      CREATE INDEX IF NOT EXISTS idx_conf_items_asset_id ON conference_items(asset_id);
     `);
+
+    // Populate normalized conference_items for existing records (idempotent)
+    this.migrateConferenceItemsFromSnapshots();
 
     // Create users table
     this.db.exec(`
@@ -186,7 +206,8 @@ class DatabaseService {
       sector: row.sector,
       category: row.category,
       tags: row.tags ? JSON.parse(row.tags) : [],
-      history: this.getAssetHistory(row.id)
+      history: this.getAssetHistory(row.id),
+      conferenceHistory: this.getAssetConferenceHistory(row.id)
     }));
   }
 
@@ -207,7 +228,8 @@ class DatabaseService {
       sector: row.sector,
       category: row.category,
       tags: row.tags ? JSON.parse(row.tags) : [],
-      history: this.getAssetHistory(row.id)
+      history: this.getAssetHistory(row.id),
+      conferenceHistory: this.getAssetConferenceHistory(row.id)
     };
   }
 
@@ -457,74 +479,86 @@ class DatabaseService {
   }
 
   createConference(conference: ConferenceRecord): void {
-    const stmt = this.db.prepare(`
-      INSERT INTO conference_records (id, date, location, notes, stats_matches, stats_aliens, stats_new_items, stats_missing, scanned_items_snapshot, decisions_snapshot, status, created_by, last_modified_by, last_modified_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    const tx = this.db.transaction((payload: ConferenceRecord) => {
+      const stmt = this.db.prepare(`
+        INSERT INTO conference_records (id, date, location, notes, stats_matches, stats_aliens, stats_new_items, stats_missing, scanned_items_snapshot, decisions_snapshot, status, created_by, last_modified_by, last_modified_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
 
-    stmt.run(
-      conference.id,
-      conference.date,
-      conference.location,
-      conference.notes || null,
-      conference.stats.matches,
-      conference.stats.aliens,
-      conference.stats.newItems,
-      conference.stats.missing,
-      JSON.stringify(conference.scannedItemsSnapshot),
-      conference.decisionsSnapshot ? JSON.stringify(conference.decisionsSnapshot) : null,
-      conference.status || 'DRAFT',
-      conference.createdBy,
-      conference.lastModifiedBy,
-      new Date().toISOString()
-    );
+      stmt.run(
+        payload.id,
+        payload.date,
+        payload.location,
+        payload.notes || null,
+        payload.stats.matches,
+        payload.stats.aliens,
+        payload.stats.newItems,
+        payload.stats.missing,
+        JSON.stringify(payload.scannedItemsSnapshot),
+        payload.decisionsSnapshot ? JSON.stringify(payload.decisionsSnapshot) : null,
+        payload.status || 'DRAFT',
+        payload.createdBy,
+        payload.lastModifiedBy,
+        new Date().toISOString()
+      );
+
+      this.syncConferenceItems(payload);
+    });
+
+    tx(conference);
   }
 
   updateConference(conference: ConferenceRecord): void {
-    const stmt = this.db.prepare(`
-      UPDATE conference_records
-      SET 
-        date = ?,
-        location = ?,
-        notes = ?,
-        stats_matches = ?,
-        stats_aliens = ?,
-        stats_new_items = ?,
-        stats_missing = ?,
-        scanned_items_snapshot = ?,
-        decisions_snapshot = ?,
-        status = ?,
-        approved_by = ?,
-        approved_at = ?,
-        rejected_by = ?,
-        rejection_reason = ?,
-        rejected_at = ?,
-        last_modified_by = ?,
-        last_modified_at = ?,
-        created_at = created_at
-      WHERE id = ?
-    `);
+    const updateTx = this.db.transaction((payload: ConferenceRecord) => {
+      const stmt = this.db.prepare(`
+        UPDATE conference_records
+        SET 
+          date = ?,
+          location = ?,
+          notes = ?,
+          stats_matches = ?,
+          stats_aliens = ?,
+          stats_new_items = ?,
+          stats_missing = ?,
+          scanned_items_snapshot = ?,
+          decisions_snapshot = ?,
+          status = ?,
+          approved_by = ?,
+          approved_at = ?,
+          rejected_by = ?,
+          rejection_reason = ?,
+          rejected_at = ?,
+          last_modified_by = ?,
+          last_modified_at = ?,
+          created_at = created_at
+        WHERE id = ?
+      `);
 
-    stmt.run(
-      conference.date,
-      conference.location,
-      conference.notes || null,
-      conference.stats.matches,
-      conference.stats.aliens,
-      conference.stats.newItems,
-      conference.stats.missing,
-      JSON.stringify(conference.scannedItemsSnapshot),
-      conference.decisionsSnapshot ? JSON.stringify(conference.decisionsSnapshot) : null,
-      conference.status || 'DRAFT',
-      conference.approvedBy || null,
-      conference.approvedAt || null,
-      conference.rejectedBy || null,
-      conference.rejectionReason || null,
-      conference.rejectedAt || null,
-      conference.lastModifiedBy,
-      new Date().toISOString(),
-      conference.id
-    );
+      stmt.run(
+        payload.date,
+        payload.location,
+        payload.notes || null,
+        payload.stats.matches,
+        payload.stats.aliens,
+        payload.stats.newItems,
+        payload.stats.missing,
+        JSON.stringify(payload.scannedItemsSnapshot),
+        payload.decisionsSnapshot ? JSON.stringify(payload.decisionsSnapshot) : null,
+        payload.status || 'DRAFT',
+        payload.approvedBy || null,
+        payload.approvedAt || null,
+        payload.rejectedBy || null,
+        payload.rejectionReason || null,
+        payload.rejectedAt || null,
+        payload.lastModifiedBy,
+        new Date().toISOString(),
+        payload.id
+      );
+
+      this.syncConferenceItems(payload);
+    });
+
+    updateTx(conference);
   }
 
   updateConferenceSummaryAndSnapshot(
@@ -532,25 +566,34 @@ class DatabaseService {
     summary: { matches: number; aliens: number; newItems: number; missing: number },
     scannedItemsSnapshot: any[]
   ): void {
-    const stmt = this.db.prepare(`
-      UPDATE conference_records
-      SET 
-        stats_matches = ?,
-        stats_aliens = ?,
-        stats_new_items = ?,
-        stats_missing = ?,
-        scanned_items_snapshot = ?
-      WHERE id = ?
-    `);
+    const tx = this.db.transaction(() => {
+      const stmt = this.db.prepare(`
+        UPDATE conference_records
+        SET 
+          stats_matches = ?,
+          stats_aliens = ?,
+          stats_new_items = ?,
+          stats_missing = ?,
+          scanned_items_snapshot = ?
+        WHERE id = ?
+      `);
 
-    stmt.run(
-      summary.matches,
-      summary.aliens,
-      summary.newItems,
-      summary.missing,
-      JSON.stringify(scannedItemsSnapshot || []),
-      id
-    );
+      stmt.run(
+        summary.matches,
+        summary.aliens,
+        summary.newItems,
+        summary.missing,
+        JSON.stringify(scannedItemsSnapshot || []),
+        id
+      );
+
+      const existing = this.getConferenceById(id);
+      if (existing) {
+        this.syncConferenceItems(existing);
+      }
+    });
+
+    tx();
   }
 
   close(): void {
@@ -560,6 +603,79 @@ class DatabaseService {
   deleteConference(id: string): void {
     const stmt = this.db.prepare('DELETE FROM conference_records WHERE id = ?');
     stmt.run(id);
+  }
+
+  private migrateConferenceItemsFromSnapshots(): void {
+    // Idempotent population: if conference_items already has rows, skip
+    const countStmt = this.db.prepare('SELECT COUNT(1) as cnt FROM conference_items');
+    const { cnt } = countStmt.get() as { cnt: number };
+    if (cnt > 0) return;
+
+    const conferences = this.getAllConferences();
+    const tx = this.db.transaction(() => {
+      for (const conf of conferences) {
+        this.syncConferenceItems(conf);
+      }
+    });
+    tx();
+  }
+
+  private syncConferenceItems(conference: ConferenceRecord): void {
+    const deleteStmt = this.db.prepare('DELETE FROM conference_items WHERE conference_id = ?');
+    deleteStmt.run(conference.id);
+
+    if (!conference.scannedItemsSnapshot || conference.scannedItemsSnapshot.length === 0) return;
+
+    const insertStmt = this.db.prepare(`
+      INSERT INTO conference_items (
+        id, conference_id, asset_id, status, expected_location, scanned_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    const tx = this.db.transaction((items: any[]) => {
+      for (const item of items) {
+        // Only persist items that map to existing assets (MATCH/ALIEN)
+        if (item.status === 'NEW') continue;
+
+        insertStmt.run(
+          crypto.randomUUID(),
+          conference.id,
+          item.id,
+          item.status,
+          item.expectedLocation || null,
+          item.timestamp || conference.date
+        );
+      }
+    });
+
+    tx(conference.scannedItemsSnapshot || []);
+  }
+
+  private getAssetConferenceHistory(assetId: string): ConferenceAppearance[] {
+    const stmt = this.db.prepare(`
+      SELECT 
+        ci.conference_id as conferenceId,
+        ci.status as itemStatus,
+        ci.expected_location as expectedLocation,
+        ci.scanned_at as scannedAt,
+        cr.date as conferenceDate,
+        cr.location as conferenceLocation,
+        cr.status as conferenceStatus
+      FROM conference_items ci
+      JOIN conference_records cr ON cr.id = ci.conference_id
+      WHERE ci.asset_id = ?
+      ORDER BY COALESCE(ci.scanned_at, cr.date) DESC
+    `);
+
+    return (stmt.all(assetId) as any[]).map(row => ({
+      conferenceId: row.conferenceId,
+      conferenceDate: row.conferenceDate,
+      conferenceLocation: row.conferenceLocation,
+      conferenceStatus: row.conferenceStatus,
+      itemStatus: row.itemStatus,
+      expectedLocation: row.expectedLocation || undefined,
+      scannedAt: row.scannedAt || undefined
+    }));
   }
 
   // User operations

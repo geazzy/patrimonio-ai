@@ -15,7 +15,8 @@ import {
   ShieldCheck,
   X,
   UserCheck,
-  Plus
+  Plus,
+  ClipboardList
 } from 'lucide-react';
 import apiService, { User as UserType } from '../services/apiService';
 
@@ -129,6 +130,42 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
   };
 
   const hasLocationChanged = editLocation !== currentAsset.location;
+
+  const formatDate = (value?: string | Date) => {
+    if (!value) return '-';
+    const date = typeof value === 'string' ? new Date(value) : value;
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    });
+  };
+
+  const conferenceStatusBadge = (status: string) => {
+    const base = 'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 border';
+    switch (status) {
+      case 'APPROVED':
+        return `${base} bg-emerald-50 text-emerald-700 border-emerald-200`;
+      case 'PENDING_APPROVAL':
+        return `${base} bg-amber-50 text-amber-700 border-amber-200`;
+      case 'REJECTED':
+        return `${base} bg-red-50 text-red-700 border-red-200`;
+      default:
+        return `${base} bg-slate-50 text-slate-700 border-slate-200`;
+    }
+  };
+
+  const itemStatusBadge = (status: string) => {
+    const base = 'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center border';
+    switch (status) {
+      case 'ALIEN':
+        return `${base} bg-orange-50 text-orange-700 border-orange-200`;
+      case 'NEW':
+        return `${base} bg-purple-50 text-purple-700 border-purple-200`;
+      default:
+        return `${base} bg-blue-50 text-blue-700 border-blue-200`;
+    }
+  };
   
   // Use currentAsset for display
   const displayAsset = currentAsset;
@@ -322,6 +359,55 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
               <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-lg border border-slate-200">
                 <History size={32} className="mx-auto mb-2 text-slate-300" />
                 <p className="text-sm">Nenhuma movimentação registrada</p>
+              </div>
+            )}
+          </div>
+
+          {/* Conference History Section */}
+          <div className="border-t border-slate-200 pt-6">
+            <div className="flex items-center gap-2 text-slate-700 font-semibold mb-4">
+              <ClipboardList size={18} className="text-blue-600" />
+              <span>Histórico de Conferências</span>
+            </div>
+            {displayAsset.conferenceHistory && displayAsset.conferenceHistory.length > 0 ? (
+              <div className="overflow-x-auto bg-slate-50 border border-slate-200 rounded-lg">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-100 text-slate-600 uppercase text-xs">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Data</th>
+                      <th className="px-4 py-3 text-left">Local Conferido</th>
+                      <th className="px-4 py-3 text-left">Status do Item</th>
+                      <th className="px-4 py-3 text-left">Status da Conferência</th>
+                      <th className="px-4 py-3 text-left">Esperado em</th>
+                      <th className="px-4 py-3 text-left">Conferência</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayAsset.conferenceHistory.map((entry, idx) => (
+                      <tr key={`${entry.conferenceId}-${idx}`} className="border-t border-slate-200">
+                        <td className="px-4 py-3 text-slate-800">{formatDate(entry.scannedAt || entry.conferenceDate)}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-800">{entry.conferenceLocation}</td>
+                        <td className="px-4 py-3"><span className={itemStatusBadge(entry.itemStatus)}>{entry.itemStatus}</span></td>
+                        <td className="px-4 py-3"><span className={conferenceStatusBadge(entry.conferenceStatus)}>{entry.conferenceStatus.replace('_', ' ')}</span></td>
+                        <td className="px-4 py-3 text-slate-700">{entry.expectedLocation || '—'}</td>
+                        <td className="px-4 py-3 text-blue-600 font-semibold">
+                          <a
+                            href={`#/conferences/${entry.conferenceId}`}
+                            className="hover:underline"
+                            title="Ver conferência"
+                          >
+                            {entry.conferenceId}
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-lg border border-slate-200">
+                <ClipboardList size={32} className="mx-auto mb-2 text-slate-300" />
+                <p className="text-sm">Nenhum registro de conferência para este item</p>
               </div>
             )}
           </div>

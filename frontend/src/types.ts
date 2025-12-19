@@ -19,6 +19,7 @@ export interface Asset {
   category: string;
   tags: string[];
   history: MovementHistory[];
+  conferenceHistory?: ConferenceAppearance[];
 }
 
 export interface ImportConflict {
@@ -54,6 +55,16 @@ export enum ViewMode {
 
 // Conference Specific Types
 export type ScanStatus = 'MATCH' | 'ALIEN' | 'NEW';
+
+export interface ConferenceAppearance {
+  conferenceId: string;
+  conferenceDate: string;
+  conferenceLocation: string;
+  conferenceStatus: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  itemStatus: ScanStatus;
+  expectedLocation?: string;
+  scannedAt?: string;
+}
 
 export interface ScannedItem {
   id: string;

@@ -244,7 +244,7 @@ router.post('/:id/reject', (req: Request, res: Response) => {
 
     db.updateConference({
       ...conference,
-      status: 'DRAFT',
+      status: 'REJECTED',
       rejectedBy: decidedBy,
       rejectedAt: new Date().toISOString(),
       rejectionReason: reason,
